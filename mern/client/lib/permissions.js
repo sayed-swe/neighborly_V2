@@ -7,6 +7,7 @@ export const PERMISSIONS = {
   'content:moderate': ['moderator', 'admin'],
   'alert:broadcast': ['moderator', 'admin'],
   'admin:dashboard': ['admin'],
+  'audit:read': ['admin'],
   'users:read': ['moderator', 'admin'],
   'users:manage': ['admin'],
 };

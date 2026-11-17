@@ -6,6 +6,7 @@ import './auth.css';
 import './app-shell.css';
 import './feed.css';
 import './admin.css';
+import './features.css';
 
 const fraunces = Fraunces({ subsets: ['latin'], variable: '--font-fraunces', axes: ['opsz', 'SOFT'], display: 'swap' });
 const instrument = Instrument_Sans({ subsets: ['latin'], variable: '--font-instrument', display: 'swap' });

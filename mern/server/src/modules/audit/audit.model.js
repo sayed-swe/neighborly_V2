@@ -4,7 +4,7 @@ export const AUDIT_EVENTS = [
   'register', 'email_verified', 'login', 'login_failed', 'account_locked', 'logout', 'logout_all',
   'password_reset_requested', 'password_reset', 'password_changed', 'refresh_reuse_detected',
   'session_revoked', 'role_changed', 'suspended', 'unsuspended', 'location_updated', 'account_deleted', 'google_linked',
-  'post_created', 'post_hidden', 'post_removed', 'post_restored', 'comment_removed', 'report_handled',
+  'post_created', 'post_hidden', 'post_removed', 'post_restored', 'comment_removed', 'report_handled', 'service_updated', 'alert_sent', 'alert_resolved',
 ];
 
 const auditSchema = new mongoose.Schema(
