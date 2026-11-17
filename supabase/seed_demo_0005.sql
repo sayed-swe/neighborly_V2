@@ -1,0 +1,8 @@
+-- Demo data for the 0005 features (address parts, neighbors on the map, contact details). Safe to re-run.
+update public.profiles set house='12/A', road='Road 3', thana='Ashulia', postcode='1341', latitude=23.8772, longitude=90.3187, show_on_map=true, phone=coalesce(phone,'01711000001') where username='karima';
+update public.profiles set house='7',    road='Road 5', thana='Ashulia', postcode='1341', latitude=23.8751, longitude=90.3235, show_on_map=true, phone=coalesce(phone,'01711000002') where username='rahim';
+update public.profiles set house='33',   road='Road 1', thana='Ashulia', postcode='1341', latitude=23.8794, longitude=90.3210, show_on_map=true, phone=coalesce(phone,'01711000003') where username='nusrat';
+update public.profiles set road='Station Road', thana='Savar', postcode='1340', latitude=23.8583, longitude=90.2667, show_on_map=true where username='sohel_el';
+update public.marketplace_listings m set contact_phone=p.phone, contact_email=p.username||'@neighborly.test' from public.profiles p where p.id=m.user_id and m.contact_phone is null and p.username in ('karima','rahim','nusrat') and p.phone is not null;
+update public.lost_found_items m set contact_phone=p.phone, contact_email=p.username||'@neighborly.test' from public.profiles p where p.id=m.user_id and m.contact_phone is null and p.username in ('karima','rahim','nusrat') and p.phone is not null;
+update public.help_requests m set contact_phone=p.phone, contact_email=p.username||'@neighborly.test' from public.profiles p where p.id=m.user_id and m.contact_phone is null and p.username in ('karima','rahim','nusrat') and p.phone is not null;
