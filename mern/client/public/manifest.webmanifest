@@ -1,0 +1,10 @@
+{
+  "name": "Neighborly",
+  "short_name": "Neighborly",
+  "description": "Your neighborhood, within reach.",
+  "start_url": "/home",
+  "display": "standalone",
+  "background_color": "#f6f1e8",
+  "theme_color": "#1f4d3a",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
