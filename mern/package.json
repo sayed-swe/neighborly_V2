@@ -1,0 +1,24 @@
+{
+  "name": "neighborly-mern",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Neighborly on the MERN stack (Next.js + Express + MongoDB)",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "predev": "node scripts/preflight.mjs",
+    "dev": "concurrently -n api,web -c green,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "test": "npm test -w server",
+    "seed:admin": "npm run seed:admin -w server",
+    "seed:demo": "npm run seed:demo -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
