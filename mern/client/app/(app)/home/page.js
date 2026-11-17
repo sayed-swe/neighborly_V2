@@ -17,9 +17,9 @@ import { Avatar, Spinner, useToast } from '@/components/ui';
 const QUICK = [
   { icon: Megaphone, label: 'Share an update', href: '/feed?compose=general', tone: 'green' },
   { icon: HandHelping, label: 'Ask for help', href: '/feed?compose=help', tone: 'brick' },
-  { icon: Tag, label: 'Sell or give away', href: '/feed?compose=sale', tone: 'plum' },
-  { icon: PackageSearch, label: 'Report lost item', href: '/feed?compose=lost-found', tone: 'sun' },
-  { icon: CalendarDays, label: 'Create an event', href: '/feed?compose=event', tone: 'sky' },
+  { icon: Tag, label: 'Sell or give away', href: '/marketplace', tone: 'plum' },
+  { icon: PackageSearch, label: 'Lost & found', href: '/lost-found', tone: 'sun' },
+  { icon: CalendarDays, label: 'Events near you', href: '/events', tone: 'sky' },
 ];
 
 function RadiusControl() {
@@ -127,7 +127,7 @@ export default function HomePage() {
             </Link>
           ))}
           {can(user, 'alert:broadcast') && (
-            <Link href="/soon/alerts" className="quick-item quick-danger"><span className="quick-ico"><Siren size={20} /></span>Send emergency alert</Link>
+            <Link href="/alerts" className="quick-item quick-danger"><span className="quick-ico"><Siren size={20} /></span>Send emergency alert</Link>
           )}
         </div>
       </section>
