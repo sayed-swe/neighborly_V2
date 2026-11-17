@@ -21,3 +21,17 @@ export const REPORT_REASONS = [
   ['inappropriate', 'Inappropriate content'],
   ['other', 'Something else'],
 ];
+
+export const LISTING_KINDS = [['sell', 'For sale'], ['wanted', 'Wanted'], ['exchange', 'Exchange'], ['free', 'Free']];
+export const CONDITIONS = [['new', 'New'], ['like-new', 'Like new'], ['good', 'Good'], ['fair', 'Fair'], ['for-parts', 'For parts']];
+export const LISTING_STATUS = { available: ['badge-green', 'Available'], reserved: ['badge-sun', 'Reserved'], sold: ['badge-danger', 'Sold'] };
+export const label = (pairs, v) => pairs.find(([k]) => k === v)?.[1] ?? v;
+export const REQUEST_STATUS = { pending: ['badge-sun', 'Pending'], accepted: ['badge-green', 'Accepted'], declined: ['badge-danger', 'Declined'], done: ['badge-sky', 'Done'], cancelled: ['', 'Cancelled'] };
+export const SEVERITY = { low: ['badge-sky', 'Low'], medium: ['badge-sun', 'Medium'], high: ['badge-brick', 'High'], critical: ['badge-danger', 'Critical'] };
+
+export function fmtWhen(start, end) {
+  const s = new Date(start);
+  const day = s.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const t = (d) => d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${day} · ${t(s)}${end ? ` – ${t(new Date(end))}` : ''}`;
+}
