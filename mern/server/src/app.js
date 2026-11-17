@@ -13,6 +13,11 @@ import adminRoutes from './modules/admin/admin.routes.js';
 import geoRoutes from './modules/geo/geo.routes.js';
 import uploadRoutes from './modules/uploads/uploads.routes.js';
 import { postsRouter, commentsRouter } from './modules/posts/posts.routes.js';
+import servicesRoutes, { adminServices } from './modules/services/services.routes.js';
+import messagesRoutes from './modules/messages/messages.routes.js';
+import notificationRoutes from './modules/notifications/notifications.routes.js';
+import alertRoutes from './modules/alerts/alerts.routes.js';
+import mapRoutes from './modules/map/map.routes.js';
 import { apiLimiter, rejectOperatorKeys } from './middleware/security.js';
 import { errorHandler, notFound } from './middleware/error.js';
 
@@ -66,6 +71,12 @@ export function createApp() {
   app.use('/api/geo', geoRoutes);
   app.use('/api/posts', postsRouter);
   app.use('/api/comments', commentsRouter);
+  app.use('/api/services', servicesRoutes);
+  app.use('/api/admin/services', adminServices);
+  app.use('/api/conversations', messagesRoutes);
+  app.use('/api/notifications', notificationRoutes);
+  app.use('/api/alerts', alertRoutes);
+  app.use('/api/map', mapRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

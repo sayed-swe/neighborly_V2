@@ -76,6 +76,26 @@ r.get('/me/nearby-count', async (req, res) => {
   res.json({ count, radiusKm: me.location.radiusKm });
 });
 
+/** Public profile: what other members may see. Never the email or the exact home. */
+r.get('/:id/profile', validate({ params: z.strictObject({ id: z.string().regex(/^[a-f0-9]{24}$/, 'Invalid id') }) }), async (req, res) => {
+  const u = await User.findOne({ _id: req.valid.params.id, emailVerified: true }).lean();
+  if (!u) throw errors.notFound('Member not found');
+  const { Post } = await import('../posts/models.js');
+  const { Service } = await import('../services/models.js');
+  const [posts, services] = await Promise.all([
+    Post.countDocuments({ author: u._id, status: 'active' }),
+    Service.countDocuments({ provider: u._id, active: true }),
+  ]);
+  res.json({
+    profile: {
+      id: u._id, name: u.name, avatarUrl: u.avatarUrl, role: u.role, bio: u.bio, areaName: u.location?.areaName,
+      joinedAt: u.createdAt, suspended: u.status === 'suspended',
+      provider: u.role === 'provider' ? { businessName: u.provider?.businessName, category: u.provider?.category, description: u.provider?.description } : undefined,
+      stats: { posts, services }, isMe: String(u._id) === String(req.user._id),
+    },
+  });
+});
+
 r.get('/me/activity', async (req, res) => {
   const events = await AuditEvent.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(20).select('type ip userAgent createdAt').lean();
   res.json({ events: events.map(({ _id, ...e }) => ({ id: _id, ...e })) });
