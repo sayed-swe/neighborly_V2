@@ -5,6 +5,11 @@ const { Schema } = mongoose;
 export const CATEGORIES = ['general', 'news', 'help', 'sale', 'lost-found', 'event'];
 export const REACTION_TYPES = ['like', 'love', 'haha', 'wow', 'sad'];
 export const REPORT_REASONS = ['spam', 'harassment', 'false-info', 'scam', 'inappropriate', 'other'];
+export const LISTING_TYPES = ['sell', 'wanted', 'exchange', 'free'];
+export const CONDITIONS = ['new', 'like-new', 'good', 'fair', 'for-parts'];
+export const LISTING_STATUS = ['available', 'reserved', 'sold'];
+export const LF_TYPES = ['lost', 'found'];
+export const RSVP_TYPES = ['going', 'interested'];
 
 const counters = () => Object.fromEntries(REACTION_TYPES.map((t) => [t, { type: Number, default: 0, min: 0 }]));
 
@@ -19,7 +24,32 @@ const postSchema = new Schema(
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     text: { type: String, trim: true, maxlength: 2000, default: '' },
     category: { type: String, enum: CATEGORIES, default: 'general', index: true },
+    title: { type: String, trim: true, maxlength: 150 },
     price: { type: Number, min: 0, max: 1e8 },
+    // Typed details, present only for the matching category
+    listing: {
+      kind: { type: String, enum: LISTING_TYPES },
+      condition: { type: String, enum: CONDITIONS },
+      status: { type: String, enum: LISTING_STATUS },
+    },
+    lost: {
+      kind: { type: String, enum: LF_TYPES },
+      place: { type: String, trim: true, maxlength: 200 },
+      date: Date,
+      status: { type: String, enum: ['open', 'reunited'] },
+    },
+    event: {
+      startsAt: Date,
+      endsAt: Date,
+      place: { type: String, trim: true, maxlength: 200 },
+      capacity: { type: Number, min: 1, max: 100000 },
+      going: { type: Number, default: 0, min: 0 },
+      interested: { type: Number, default: 0, min: 0 },
+    },
+    help: {
+      status: { type: String, enum: ['open', 'resolved'] },
+      offers: { type: Number, default: 0, min: 0 },
+    },
     images: { type: [{ type: String, maxlength: 80 }], validate: (v) => v.length <= 4 },
     // Copied from the author's *approximate* location. Never the exact home.
     location: { type: pointSchema, required: true },
@@ -37,7 +67,8 @@ const postSchema = new Schema(
 );
 postSchema.index({ location: '2dsphere' });
 postSchema.index({ status: 1, createdAt: -1, _id: -1 });
-postSchema.index({ text: 'text' });
+postSchema.index({ title: 'text', text: 'text' });
+postSchema.index({ category: 1, 'event.startsAt': 1 });
 export const Post = mongoose.model('Post', postSchema);
 
 /* ------------------------------ Comment ------------------------------ */
@@ -88,3 +119,27 @@ const reportSchema = new Schema(
 );
 reportSchema.index({ reporter: 1, targetType: 1, target: 1 }, { unique: true }); // can't report the same thing twice
 export const Report = mongoose.model('Report', reportSchema);
+
+/* ------------------------------ Event RSVP --------------------------- */
+const rsvpSchema = new Schema(
+  {
+    post: { type: Schema.Types.ObjectId, ref: 'Post', required: true },
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    status: { type: String, enum: RSVP_TYPES, required: true },
+  },
+  { timestamps: true },
+);
+rsvpSchema.index({ post: 1, user: 1 }, { unique: true });
+export const Rsvp = mongoose.model('Rsvp', rsvpSchema);
+
+/* ------------------------------ Help offer --------------------------- */
+const offerSchema = new Schema(
+  {
+    post: { type: Schema.Types.ObjectId, ref: 'Post', required: true },
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    message: { type: String, trim: true, maxlength: 500 },
+  },
+  { timestamps: true },
+);
+offerSchema.index({ post: 1, user: 1 }, { unique: true });
+export const HelpOffer = mongoose.model('HelpOffer', offerSchema);
