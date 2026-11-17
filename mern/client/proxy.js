@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 // Fast, server-side redirects based on the non-secret session hint cookie.
 // This is UX only; real authorization is enforced by the API on every request.
-const PROTECTED = ['/home', '/feed', '/post', '/onboarding', '/settings', '/admin', '/soon'];
+const PROTECTED = ['/home', '/feed', '/post', '/map', '/marketplace', '/services', '/lost-found', '/events', '/messages', '/alerts', '/u', '/onboarding', '/settings', '/admin', '/soon'];
 const GUEST_ONLY = ['/login', '/register', '/forgot-password'];
 
 export function proxy(request) {
@@ -22,5 +22,5 @@ export function proxy(request) {
 }
 
 export const config = {
-  matcher: ['/home/:path*', '/feed/:path*', '/post/:path*', '/onboarding', '/settings/:path*', '/admin/:path*', '/soon/:path*', '/login', '/register', '/forgot-password'],
+  matcher: ['/home/:path*', '/feed/:path*', '/post/:path*', '/map', '/marketplace', '/services/:path*', '/lost-found', '/events', '/messages', '/alerts', '/u/:path*', '/onboarding', '/settings/:path*', '/admin/:path*', '/soon/:path*', '/login', '/register', '/forgot-password'],
 };
