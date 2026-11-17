@@ -4,7 +4,7 @@ import { ImagePlus, X } from 'lucide-react';
 import { api, parseError } from '@/lib/api';
 import { useAuth } from '@/lib/AuthProvider';
 import { prepareImage } from '@/lib/images';
-import { CATEGORIES, CATEGORY_KEYS } from '@/lib/categories';
+import { CATEGORIES, CATEGORY_KEYS, CONDITIONS, LISTING_KINDS } from '@/lib/categories';
 import { Alert, Avatar, Button, Spinner } from '@/components/ui';
 import Modal from '@/components/Modal';
 
@@ -35,13 +35,20 @@ export default function ComposerModal({ preset = {}, onClose, onPosted }) {
   const [category, setCategory] = useState(preset.category ?? 'general');
   const [text, setText] = useState('');
   const [price, setPrice] = useState('');
+  const [title, setTitle] = useState('');
+  const [listing, setListing] = useState({ kind: 'sell', condition: '' });
+  const [lost, setLost] = useState({ kind: 'lost', place: '', date: '' });
+  const [event, setEvent] = useState({ startsAt: '', endsAt: '', place: '', capacity: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const typed = ['sale', 'lost-found', 'event'].includes(category);
   const [images, setImages] = useState([]); // { url, uploading?, error? }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef(null);
 
   const uploading = images.some((i) => i.uploading);
-  const canPost = (text.trim() || images.some((i) => i.url)) && !uploading && !busy;
+  const hasContent = typed ? title.trim().length >= 2 : (text.trim() || images.some((i) => i.url));
+  const canPost = hasContent && !uploading && !busy;
 
   async function addFiles(fileList) {
     const files = [...fileList].slice(0, 4 - images.length);
@@ -66,13 +73,28 @@ export default function ComposerModal({ preset = {}, onClose, onPosted }) {
     setBusy(true); setError('');
     try {
       const body = { text: text.trim(), category, images: images.filter((i) => i.url).map((i) => i.url) };
-      if (category === 'sale' && price !== '') body.price = Number(price);
+      if (typed) body.title = title.trim();
+      if (category === 'sale') {
+        body.listing = { kind: listing.kind, ...(listing.condition && { condition: listing.condition }) };
+        if (listing.kind === 'free') body.price = 0;
+        else if (price !== '' && listing.kind !== 'wanted') body.price = Number(price);
+      }
+      if (category === 'lost-found') body.lost = { kind: lost.kind, place: lost.place.trim(), ...(lost.date && { date: new Date(lost.date).toISOString() }) };
+      if (category === 'event') {
+        body.event = {
+          startsAt: event.startsAt ? new Date(event.startsAt).toISOString() : '', place: event.place.trim(),
+          ...(event.endsAt && { endsAt: new Date(event.endsAt).toISOString() }), ...(event.capacity && { capacity: Number(event.capacity) }),
+        };
+      }
+      setFieldErrors({});
       const { data } = await api.post('/posts', body);
       onPosted(data.post);
       onClose();
     } catch (err) {
       const e = parseError(err);
-      setError(e.fields?.text ?? e.fields?.price ?? e.message);
+      setFieldErrors(e.fields ?? {});
+      const first = Object.values(e.fields ?? {})[0];
+      setError(first ?? e.message);
       setBusy(false);
     }
   }
@@ -92,17 +114,70 @@ export default function ComposerModal({ preset = {}, onClose, onPosted }) {
         })}
       </div>
 
-      <label htmlFor="composer-text" className="sr-only">Post text</label>
-      <textarea id="composer-text" data-autofocus className="composer-text" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)}
-        placeholder={CATEGORIES[category].placeholder} />
-      <div className="composer-count tiny muted">{text.length}/2000</div>
+      {typed && (
+        <div className="typed-fields">
+          <div className="field">
+            <label className="label" htmlFor="c-title">{category === 'lost-found' ? 'What is the item?' : category === 'event' ? 'Event name' : 'What are you listing?'}</label>
+            <input id="c-title" className="input" maxLength={150} value={title} onChange={(e) => setTitle(e.target.value)} aria-invalid={fieldErrors.title ? 'true' : undefined}
+              placeholder={category === 'lost-found' ? 'e.g. Grey cat with a red collar' : category === 'event' ? 'e.g. Lake cleanup' : 'e.g. Mountain bicycle, 21 gears'} />
+          </div>
 
-      {category === 'sale' && (
-        <div className="field" style={{ marginTop: 8 }}>
-          <label className="label" htmlFor="price">Price in ৳ <span className="tiny muted">0 = free</span></label>
-          <input id="price" className="input" type="number" inputMode="numeric" min="0" max="100000000" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 4500" />
+          {category === 'sale' && (
+            <>
+              <div className="seg seg-sm" role="radiogroup" aria-label="Listing type">
+                {LISTING_KINDS.map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={listing.kind === v} className={listing.kind === v ? 'is-active' : ''} onClick={() => setListing({ ...listing, kind: v })}>{l}</button>)}
+              </div>
+              <div className="field-row" style={{ marginTop: 0 }}>
+                {listing.kind !== 'free' && listing.kind !== 'wanted' && (
+                  <div className="field"><label className="label" htmlFor="price">Price in ৳</label>
+                    <input id="price" className="input" type="number" inputMode="numeric" min="0" max="100000000" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 4500" /></div>
+                )}
+                <div className="field"><label className="label" htmlFor="cond">Condition</label>
+                  <select id="cond" className="select" value={listing.condition} onChange={(e) => setListing({ ...listing, condition: e.target.value })}>
+                    <option value="">Not specified</option>{CONDITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select></div>
+              </div>
+            </>
+          )}
+
+          {category === 'lost-found' && (
+            <>
+              <div className="seg seg-sm" role="radiogroup" aria-label="Lost or found">
+                {[['lost', 'I lost something'], ['found', 'I found something']].map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={lost.kind === v} className={lost.kind === v ? 'is-active' : ''} onClick={() => setLost({ ...lost, kind: v })}>{l}</button>)}
+              </div>
+              <div className="field-row" style={{ marginTop: 0 }}>
+                <div className="field"><label className="label" htmlFor="lf-place">Where?</label>
+                  <input id="lf-place" className="input" maxLength={200} value={lost.place} onChange={(e) => setLost({ ...lost, place: e.target.value })} placeholder="e.g. Near the park gate" aria-invalid={fieldErrors.lost ? 'true' : undefined} /></div>
+                <div className="field"><label className="label" htmlFor="lf-date">When?</label>
+                  <input id="lf-date" className="input" type="date" max={new Date().toISOString().slice(0, 10)} value={lost.date} onChange={(e) => setLost({ ...lost, date: e.target.value })} /></div>
+              </div>
+            </>
+          )}
+
+          {category === 'event' && (
+            <>
+              <div className="field-row" style={{ marginTop: 0 }}>
+                <div className="field"><label className="label" htmlFor="ev-start">Starts</label>
+                  <input id="ev-start" className="input" type="datetime-local" value={event.startsAt} onChange={(e) => setEvent({ ...event, startsAt: e.target.value })} aria-invalid={fieldErrors.event ? 'true' : undefined} /></div>
+                <div className="field"><label className="label" htmlFor="ev-end">Ends <span className="tiny muted">optional</span></label>
+                  <input id="ev-end" className="input" type="datetime-local" min={event.startsAt} value={event.endsAt} onChange={(e) => setEvent({ ...event, endsAt: e.target.value })} /></div>
+              </div>
+              <div className="field-row" style={{ marginTop: 0 }}>
+                <div className="field"><label className="label" htmlFor="ev-place">Where?</label>
+                  <input id="ev-place" className="input" maxLength={200} value={event.place} onChange={(e) => setEvent({ ...event, place: e.target.value })} placeholder="e.g. Dhanmondi Lake, gate 2" /></div>
+                <div className="field"><label className="label" htmlFor="ev-cap">Spots <span className="tiny muted">optional</span></label>
+                  <input id="ev-cap" className="input" type="number" min="1" max="100000" value={event.capacity} onChange={(e) => setEvent({ ...event, capacity: e.target.value })} placeholder="No limit" /></div>
+              </div>
+            </>
+          )}
         </div>
       )}
+
+      <label htmlFor="composer-text" className="sr-only">Post text</label>
+      <textarea id="composer-text" data-autofocus className="composer-text" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)}
+        placeholder={typed ? 'Add details (optional)…' : CATEGORIES[category].placeholder} style={typed ? { minHeight: 80, fontSize: 16 } : undefined} />
+      <div className="composer-count tiny muted">{text.length}/2000</div>
+
 
       {images.length > 0 && (
         <div className="composer-images">

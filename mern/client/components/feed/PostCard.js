@@ -13,6 +13,7 @@ import ImageGrid from './ImageGrid';
 import ReactionButton from './ReactionButton';
 import Comments from './Comments';
 import ReportModal from './ReportModal';
+import ItemDetails from './ItemDetails';
 
 const ROLE_TAG = { provider: 'Service provider', moderator: 'Moderator', admin: 'Admin' };
 
@@ -23,7 +24,7 @@ function Byline({ post, link = true }) {
   return (
     <div className="post-head-main">
       <div className="post-name">
-        <strong>{a.name}</strong>
+        {a.id ? <Link href={`/u/${a.id}`} className="post-author">{a.name}</Link> : <strong>{a.name}</strong>}
         {a.role !== 'resident' && <span className="role-tag" title={ROLE_TAG[a.role]}><BadgeCheck size={14} /> {a.business ?? ROLE_TAG[a.role]}</span>}
       </div>
       <div className="post-meta tiny muted">
@@ -44,7 +45,7 @@ function PostBody({ post, expandable = true }) {
     <>
       {post.text && <p className={`post-text ${long && !open ? 'is-clamped' : ''}`}>{post.text}</p>}
       {long && <button className="link small" onClick={() => setOpen(!open)}>{open ? 'See less' : 'See more'}</button>}
-      {post.category === 'sale' && post.price != null && <div className="post-price">{formatPrice(post.price)}</div>}
+      {post.category === 'sale' && !post.listing && post.price != null && <div className="post-price">{formatPrice(post.price)}</div>}
       <ImageGrid images={post.images} />
     </>
   );
@@ -58,6 +59,7 @@ function SharedEmbed({ shared }) {
         <Avatar user={shared.author} size={36} />
         <Byline post={shared} link={false} />
       </div>
+      {shared.title && <strong className="embed-title">{shared.title}</strong>}
       <PostBody post={shared} />
       <Link href={`/post/${shared.id}`} className="link tiny">View original post</Link>
     </div>
@@ -202,7 +204,12 @@ export default function PostCard({ initial, onDeleted, onShared, startOpen = fal
             <Button className="btn btn-primary btn-sm" loading={busy} disabled={!draft.trim() && post.images.length === 0} onClick={saveEdit}>Save</Button>
           </div>
         </div>
-      ) : <PostBody post={post} expandable={expandText} />}
+      ) : (
+        <>
+          <ItemDetails post={post} mine={mine} onChange={setPost} />
+          <PostBody post={post} expandable={expandText} />
+        </>
+      )}
 
       {post.shared && <SharedEmbed shared={post.shared} />}
 

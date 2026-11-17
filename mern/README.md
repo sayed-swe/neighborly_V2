@@ -4,7 +4,7 @@ This folder is the MERN version of Neighborly. The repository root holds the sep
 
 A hyper-local community platform: verified residents see, post and act on what's happening within 1–10 km of home. MERN stack (MongoDB, Express, React via Next.js, Node), designed to run at $0 on free tiers.
 
-> **Status:** Phase 1 complete; Phase 2 in progress (feed, reactions, comments, shares, photo posts, reports and the admin console are built). See [../docs/ROADMAP.md](../docs/ROADMAP.md).
+> **Status:** Phases 1 and 2 complete, most of Phase 3 built (messages, notifications, emergency alerts). Remaining: realtime sockets, push notifications, PWA offline mode, dark mode, Bangla, deployment. See [../docs/ROADMAP.md](../docs/ROADMAP.md).
 
 ## Quick start
 
@@ -39,7 +39,7 @@ Open http://localhost:3000.
 | Command | What it does |
 |---|---|
 | `npm run dev` | API + web with live reload |
-| `npm test` | API test suite (51 tests, in-memory MongoDB) |
+| `npm test` | API test suite (62 tests, in-memory MongoDB) |
 | `npm run build` | Production build of the web app |
 | `npm run seed:admin` | Create or promote an admin |
 | `npm run seed:demo` | Load (or reload) demo neighbours, posts and reports |
@@ -91,6 +91,21 @@ client/
 - **Share**: share now, share with a message, or copy the link; sharing a share points to the original.
 - **Admin console** (`/admin`): overview with 14-day charts, members, posts (hide / remove / restore), comments, a report queue (dismiss or remove; every report about the same item closes together) and the full activity log. Moderators see everything except the overview and the activity log.
 - **Safety**: photos are re-encoded in the browser and stripped of EXIF/GPS on the server; suspended members' posts disappear from feeds; per-action rate limits; ownership checks on every edit/delete.
+
+## Community features
+
+| Page | What people can do |
+|---|---|
+| **Buy & sell** (`/marketplace`) | List items for sale, wanted, exchange or free, with price, condition and photos; mark reserved / sold; message the seller |
+| **Lost & found** (`/lost-found`) | Report lost or found items with place and date; mark reunited; “I’ve seen it” / “It’s mine” messages the poster |
+| **Events** (`/events`) | Create events with time, place and an optional capacity; RSVP going / interested (capacity enforced); see who’s coming |
+| **Services** (`/services`) | Directory of providers near you with star reviews and an admin-verified badge; request a service and track it (pending → accepted → done); help requests with “I can help” offers |
+| **Map** (`/map`) | Everything nearby on OpenStreetMap, filterable by type, with a nearest-first list. Pins are approximate areas only |
+| **Messages** (`/messages`) | Private 1-to-1 chat with unread badges (refreshes every few seconds) |
+| **Alerts** (`/alerts`) | Moderators send emergency alerts to everyone whose home is within a chosen radius; a banner appears across the app; all notifications in one list |
+| **Profiles** (`/u/:id`) | Public profile with posts, services and about; never shows email or exact location |
+
+The notification bell covers reactions, comments, replies, shares, RSVPs, help offers, reviews, service requests and alerts.
 
 ## Security (Phase 1)
 

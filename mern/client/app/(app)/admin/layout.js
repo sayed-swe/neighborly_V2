@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, BarChart3, Flag, MessageSquare, Newspaper, ShieldAlert, Users } from 'lucide-react';
+import { Activity, BarChart3, Flag, MessageSquare, Newspaper, ShieldAlert, Users, Wrench } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/AuthProvider';
 import { can, ROLE_LABELS } from '@/lib/permissions';
@@ -12,6 +12,7 @@ const TABS = [
   { href: '/admin/users', label: 'Members', icon: Users, perm: 'users:read' },
   { href: '/admin/posts', label: 'Posts', icon: Newspaper, perm: 'content:moderate' },
   { href: '/admin/comments', label: 'Comments', icon: MessageSquare, perm: 'content:moderate' },
+  { href: '/admin/services', label: 'Services', icon: Wrench, perm: 'content:moderate' },
   { href: '/admin/reports', label: 'Reports', icon: Flag, perm: 'content:moderate', badge: true },
   { href: '/admin/activity', label: 'Activity log', icon: Activity, perm: 'audit:read' },
 ];

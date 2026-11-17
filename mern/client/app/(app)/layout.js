@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthProvider';
 import AppShell from '@/components/AppShell';
+import { ActivityProvider } from '@/lib/ActivityProvider';
 import { Spinner } from '@/components/ui';
 
 /**
@@ -24,5 +25,5 @@ export default function AppLayout({ children }) {
     return <div className="page-loader" aria-live="polite"><Spinner size={28} /><span className="sr-only">Loading your neighbourhood…</span></div>;
   }
   if (pathname === '/onboarding') return children;
-  return <AppShell>{children}</AppShell>;
+  return <ActivityProvider><AppShell>{children}</AppShell></ActivityProvider>;
 }

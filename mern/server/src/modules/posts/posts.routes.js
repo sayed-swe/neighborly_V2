@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import mongoose from 'mongoose';
 import { User } from '../users/user.model.js';
-import { Post, Comment, Reaction, Report, CATEGORIES, REACTION_TYPES, REPORT_REASONS } from './models.js';
+import { Post, Comment, Reaction, Report, Rsvp, HelpOffer, CATEGORIES, REACTION_TYPES, REPORT_REASONS, LISTING_TYPES, CONDITIONS, LISTING_STATUS, LF_TYPES, RSVP_TYPES } from './models.js';
+import { notify, clip } from '../notifications/notify.js';
 import { authenticate, requireVerified, requirePermission } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { postLimiter, commentLimiter, reportLimiter } from '../../middleware/security.js';
@@ -46,7 +47,14 @@ async function myReactions(viewer, targetType, ids) {
 
 /** Shapes posts for the API. Exact author location never appears; distance is from approximate points. */
 async function presentPosts(docs, viewer) {
-  const mine = await myReactions(viewer, 'post', docs.map((d) => d._id));
+  const ids = docs.map((d) => d._id);
+  const mine = await myReactions(viewer, 'post', ids);
+  const [rsvps, offers] = await Promise.all([
+    Rsvp.find({ user: viewer._id, post: { $in: ids } }).select('post status').lean(),
+    HelpOffer.find({ user: viewer._id, post: { $in: ids } }).select('post').lean(),
+  ]);
+  const myRsvp = new Map(rsvps.map((x) => [x.post.toString(), x.status]));
+  const myOffer = new Set(offers.map((x) => x.post.toString()));
   const sharedIds = [...new Set(docs.filter((d) => d.sharedFrom).map((d) => d.sharedFrom.toString()))];
   const originals = sharedIds.length ? await Post.find({ _id: { $in: sharedIds }, status: 'active' }).populate('author', AUTHOR_FIELDS).lean() : [];
   const originalMap = new Map(originals.map((o) => [o._id.toString(), o]));
@@ -56,7 +64,11 @@ async function presentPosts(docs, viewer) {
   const base = (d) => ({
     id: d._id.toString(),
     author: presentAuthor(d.author),
-    text: d.text, category: d.category, price: d.price, images: d.images ?? [],
+    text: d.text, title: d.title, category: d.category, price: d.price, images: d.images ?? [],
+    ...(d.category === 'sale' && d.listing?.kind && { listing: d.listing }),
+    ...(d.category === 'lost-found' && d.lost?.kind && { lost: d.lost }),
+    ...(d.category === 'event' && d.event?.startsAt && { event: { startsAt: d.event.startsAt, endsAt: d.event.endsAt, place: d.event.place, capacity: d.event.capacity, going: d.event.going ?? 0, interested: d.event.interested ?? 0 } }),
+    ...(d.category === 'help' && d.help?.status && { help: { status: d.help.status, offers: d.help.offers ?? 0 } }),
     areaName: d.areaName,
     distanceKm: here ? Math.round(distanceKm(here, d.location.coordinates) * 10) / 10 : null,
     createdAt: d.createdAt, editedAt: d.editedAt,
@@ -68,6 +80,8 @@ async function presentPosts(docs, viewer) {
       status: d.status,
       reactions: d.reactions, reactionTotal: d.reactionTotal, commentCount: d.commentCount, shareCount: d.shareCount,
       myReaction: mine.get(d._id.toString()) ?? null,
+      myRsvp: myRsvp.get(d._id.toString()) ?? null,
+      myOffer: myOffer.has(d._id.toString()),
       canEdit: d.author?._id?.equals(viewer._id) && !d.sharedFrom,
       canDelete: Boolean(d.author?._id?.equals(viewer._id) || isMod),
     };
@@ -113,19 +127,45 @@ async function loadVisiblePost(req, { allowOwnHidden = true } = {}) {
 const text = z.string().trim().max(2000, 'Keep posts under 2,000 characters').transform((v) => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ''));
 const images = z.array(z.string().regex(IMAGE_URL, 'Invalid image')).max(4, 'Up to 4 photos');
 
+const typedFields = {
+  title: z.string().trim().min(2, 'Add a short title').max(150).optional(),
+  listing: z.strictObject({ kind: z.enum(LISTING_TYPES).default('sell'), condition: z.enum(CONDITIONS).optional() }).optional(),
+  lost: z.strictObject({ kind: z.enum(LF_TYPES), place: z.string().trim().min(2, 'Where was it?').max(200), date: z.coerce.date().optional() }).optional(),
+  event: z.strictObject({
+    startsAt: z.coerce.date(), endsAt: z.coerce.date().optional(),
+    place: z.string().trim().min(2, 'Where is it?').max(200), capacity: z.number().int().min(1).max(100000).optional(),
+  }).optional(),
+};
+
 const createSchema = z.strictObject({
   text: text.default(''),
   category: z.enum(CATEGORIES).default('general'),
   price: z.number().min(0).max(1e8).optional(),
   images: images.default([]),
+  ...typedFields,
 }).superRefine((v, ctx) => {
-  if (!v.text && v.images.length === 0) ctx.addIssue({ code: 'custom', path: ['text'], message: 'Write something or add a photo' });
-  if (v.price != null && v.category !== 'sale') ctx.addIssue({ code: 'custom', path: ['price'], message: 'Price is only for items for sale' });
+  const issue = (path, message) => ctx.addIssue({ code: 'custom', path: [path], message });
+  const needsTitle = ['sale', 'lost-found', 'event'].includes(v.category);
+  if (!v.text && v.images.length === 0 && !needsTitle) issue('text', 'Write something or add a photo');
+  if (needsTitle && !v.title) issue('title', v.category === 'lost-found' ? 'What is the item?' : 'Add a short title');
+  if (v.price != null && v.category !== 'sale') issue('price', 'Price is only for items for sale');
+  if (v.listing && v.category !== 'sale') issue('listing', 'Listing details are only for items for sale');
+  if (v.category === 'lost-found' && !v.lost) issue('lost', 'Say whether it was lost or found, and where');
+  if (v.lost && v.category !== 'lost-found') issue('lost', 'Only for lost & found posts');
+  if (v.lost?.date && v.lost.date > new Date(Date.now() + 864e5)) issue('lost', 'The date can’t be in the future');
+  if (v.category === 'event' && !v.event) issue('event', 'Add when and where the event is');
+  if (v.event && v.category !== 'event') issue('event', 'Only for events');
+  if (v.event && v.event.startsAt < new Date(Date.now() - 3600e3)) issue('event', 'The event must start in the future');
+  if (v.event?.endsAt && v.event.endsAt <= v.event.startsAt) issue('event', 'The end time must be after the start');
 });
 
 /* ------------------------------- feed -------------------------------- */
 const feedQuery = z.object({
   category: z.enum(CATEGORIES).optional(),
+  author: oid.optional(),
+  kind: z.enum([...LISTING_TYPES, ...LF_TYPES]).optional(),
+  state: z.enum([...LISTING_STATUS, 'open', 'reunited', 'resolved']).optional(),
+  when: z.enum(['upcoming', 'past']).optional(),
   mine: z.enum(['1']).optional(),
   q: z.string().trim().min(2).max(80).optional(),
   before: cursor.optional(),
@@ -133,20 +173,31 @@ const feedQuery = z.object({
 });
 
 postsRouter.get('/', validate({ query: feedQuery }), async (req, res) => {
-  const { category, mine, q, before, limit } = req.valid.query;
+  const { category, mine, author, kind, state, when, q, before, limit } = req.valid.query;
   const approx = req.user.location?.approx?.coordinates;
   if (!approx) throw errors.badRequest('Set your home area first.', 'NO_LOCATION');
 
   const filter = { status: 'active' };
   if (mine) filter.author = req.user._id;
+  else if (author) filter.author = author; // profile view: everything this member posted
   else {
     filter.author = { $nin: await User.find({ status: 'suspended' }).distinct('_id') }; // suspended members' content disappears
     filter.location = { $geoWithin: { $centerSphere: [approx, req.user.location.radiusKm / 6378.1] } };
   }
   if (category) filter.category = category;
+  if (kind) filter[category === 'lost-found' ? 'lost.kind' : 'listing.kind'] = kind;
+  if (state) filter[{ sale: 'listing.status', 'lost-found': 'lost.status', help: 'help.status' }[category] ?? 'listing.status'] = state;
   if (q) filter.$text = { $search: q };
-  if (before) Object.assign(filter, cursorFilter(before, 'desc'));
 
+  if (category === 'event' && when) {
+    // Events are listed by date, not by when they were posted
+    const now = new Date();
+    filter['event.startsAt'] = when === 'upcoming' ? { $gte: new Date(now - 3 * 3600e3) } : { $lt: now };
+    const docs = await Post.find(filter).sort({ 'event.startsAt': when === 'upcoming' ? 1 : -1 }).limit(60).populate('author', AUTHOR_FIELDS).lean();
+    return res.json({ posts: await presentPosts(docs, req.user), next: null });
+  }
+
+  if (before) Object.assign(filter, cursorFilter(before, 'desc'));
   const docs = await Post.find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit + 1).populate('author', AUTHOR_FIELDS).lean();
   const page = docs.slice(0, limit);
   res.json({ posts: await presentPosts(page, req.user), next: docs.length > limit ? cursorOf(page.at(-1)) : null });
@@ -156,7 +207,12 @@ postsRouter.post('/', postLimiter, validate({ body: createSchema }), async (req,
   const { approx, areaName } = req.user.location ?? {};
   if (!approx || !req.user.onboardingComplete) throw errors.badRequest('Set your home area before posting.', 'NO_LOCATION');
   await assertImagesExist(req.body.images);
-  const post = await Post.create({ ...req.body, author: req.user._id, location: approx, areaName });
+  const body = { ...req.body };
+  if (body.category === 'sale') body.listing = { kind: 'sell', ...body.listing, status: 'available' };
+  if (body.category === 'lost-found') body.lost = { ...body.lost, status: 'open' };
+  if (body.category === 'event') body.event = { ...body.event, going: 0, interested: 0 };
+  if (body.category === 'help') body.help = { status: 'open', offers: 0 };
+  const post = await Post.create({ ...body, author: req.user._id, location: approx, areaName });
   audit(req, 'post_created', { user: req.user._id, meta: { id: post._id.toString(), category: post.category } });
   const [out] = await presentPosts([{ ...post.toObject(), author: req.user }], req.user);
   res.status(201).json({ post: out });
@@ -177,6 +233,7 @@ postsRouter.get('/:id', validate({ params: idParams }), async (req, res) => {
 
 const editSchema = z.strictObject({
   text: text.optional(),
+  title: z.string().trim().min(2).max(150).optional(),
   category: z.enum(CATEGORIES).optional(),
   price: z.number().min(0).max(1e8).nullable().optional(),
 });
@@ -184,12 +241,13 @@ const editSchema = z.strictObject({
 postsRouter.patch('/:id', validate({ params: idParams, body: editSchema }), async (req, res) => {
   const post = await loadVisiblePost(req);
   if (!post.author.equals(req.user._id) || post.sharedFrom) throw errors.forbidden('You can only edit your own posts.');
-  const { text: t, category, price } = req.body;
+  const { text: t, title, category, price } = req.body;
   if (t !== undefined) post.text = t;
+  if (title !== undefined) post.title = title;
   if (category) post.category = category;
   if (price !== undefined) post.price = price ?? undefined;
   if (post.category !== 'sale') post.price = undefined;
-  if (!post.text && post.images.length === 0) throw errors.badRequest('A post needs text or a photo.', 'VALIDATION_ERROR', { fields: { text: 'Write something' } });
+  if (!post.text && !post.title && post.images.length === 0) throw errors.badRequest('A post needs text or a photo.', 'VALIDATION_ERROR', { fields: { text: 'Write something' } });
   post.editedAt = new Date();
   await post.save();
   const doc = await Post.findById(post._id).populate('author', AUTHOR_FIELDS).lean();
@@ -204,6 +262,8 @@ postsRouter.delete('/:id', validate({ params: idParams }), async (req, res) => {
   await Promise.all([
     Comment.deleteMany({ post: post._id }),
     Reaction.deleteMany({ $or: [{ targetType: 'post', target: post._id }] }),
+    Rsvp.deleteMany({ post: post._id }),
+    HelpOffer.deleteMany({ post: post._id }),
     Report.updateMany({ post: post._id, status: 'open' }, { status: 'actioned', handledBy: req.user._id, handledAt: new Date(), note: 'Post deleted' }),
     post.deleteOne(),
   ]);
@@ -223,6 +283,8 @@ async function reactionResult(Model, id, viewerId, targetType) {
 postsRouter.put('/:id/reaction', validate({ params: idParams, body: reactionBody }), async (req, res) => {
   const post = await loadVisiblePost(req, { allowOwnHidden: false });
   await setReaction(Post, 'post', post._id, req.user._id, req.body.type);
+  notify({ user: post.author, actor: req.user._id, type: 'reaction', ref: post._id, link: `/post/${post._id}`, dedupe: true,
+    message: `${req.user.name} reacted to your post “${clip(post.title || post.text || 'photo')}”` });
   res.json(await reactionResult(Post, post._id, req.user._id, 'post'));
 });
 postsRouter.delete('/:id/reaction', validate({ params: idParams }), async (req, res) => {
@@ -243,6 +305,8 @@ postsRouter.post('/:id/share', postLimiter, validate({ params: idParams, body: z
   }
   const post = await Post.create({ author: req.user._id, text: req.body.text, category: 'general', location: approx, areaName, sharedFrom: original._id });
   await Post.updateOne({ _id: original._id }, { $inc: { shareCount: 1 } });
+  notify({ user: original.author, actor: req.user._id, type: 'share', ref: post._id, link: `/post/${original._id}`,
+    message: `${req.user.name} shared your post “${clip(original.title || original.text || 'photo')}”` });
   const doc = await Post.findById(post._id).populate('author', AUTHOR_FIELDS).lean();
   res.status(201).json({ post: (await presentPosts([doc], req.user))[0], shareCount: original.shareCount + 1 });
 });
@@ -292,6 +356,12 @@ postsRouter.post('/:id/comments', commentLimiter,
       Post.updateOne({ _id: post._id }, { $inc: { commentCount: 1 } }),
       parent && Comment.updateOne({ _id: parent._id }, { $inc: { replyCount: 1 } }),
     ]);
+    notify({ user: post.author, actor: req.user._id, type: 'comment', ref: comment._id, link: `/post/${post._id}`,
+      message: `${req.user.name} commented on your post: “${clip(req.body.text)}”` });
+    if (parent && !parent.author.equals(post.author)) {
+      notify({ user: parent.author, actor: req.user._id, type: 'reply', ref: comment._id, link: `/post/${post._id}`,
+        message: `${req.user.name} replied to your comment: “${clip(req.body.text)}”` });
+    }
     const populated = await Comment.findById(comment._id).populate('author', AUTHOR_FIELDS).lean();
     res.status(201).json({ comment: { ...presentComment(populated, new Map(), req.user, post.author), replies: [] } });
   });
@@ -356,4 +426,84 @@ commentsRouter.post('/:id/report', reportLimiter, validate({ params: idParams, b
   const c = await Comment.findById(req.valid.params.id);
   if (!c) throw errors.notFound('Comment not found');
   await fileReport(req, res, 'comment', c._id, c.post, c.author);
+});
+
+/* ---------------- typed items: status, RSVPs, help offers ---------------- */
+const STATUS_BY_CATEGORY = { sale: ['listing.status', LISTING_STATUS], 'lost-found': ['lost.status', ['open', 'reunited']], help: ['help.status', ['open', 'resolved']] };
+
+postsRouter.patch('/:id/state', validate({ params: idParams, body: z.strictObject({ state: z.string().max(20) }) }), async (req, res) => {
+  const post = await loadVisiblePost(req);
+  if (!post.author.equals(req.user._id)) throw errors.forbidden('Only the person who posted this can change it.');
+  const rule = STATUS_BY_CATEGORY[post.category];
+  if (!rule || !rule[1].includes(req.body.state)) throw errors.badRequest('That status doesn’t apply to this post.', 'VALIDATION_ERROR');
+  post.set(rule[0], req.body.state);
+  await post.save();
+  const doc = await Post.findById(post._id).populate('author', AUTHOR_FIELDS).lean();
+  res.json({ post: (await presentPosts([doc], req.user))[0] });
+});
+
+async function loadEvent(req) {
+  const post = await loadVisiblePost(req, { allowOwnHidden: false });
+  if (post.category !== 'event' || !post.event?.startsAt) throw errors.badRequest('This post isn’t an event.', 'NOT_AN_EVENT');
+  const end = post.event.endsAt ?? new Date(post.event.startsAt.getTime() + 3 * 3600e3);
+  if (end < new Date()) throw errors.badRequest('This event has already happened.', 'EVENT_OVER');
+  return post;
+}
+const rsvpCounts = async (id, userId) => {
+  const [p, mine] = await Promise.all([Post.findById(id).select('event').lean(), Rsvp.findOne({ post: id, user: userId }).select('status').lean()]);
+  return { going: p.event.going, interested: p.event.interested, capacity: p.event.capacity, myRsvp: mine?.status ?? null };
+};
+
+postsRouter.put('/:id/rsvp', validate({ params: idParams, body: z.strictObject({ status: z.enum(RSVP_TYPES) }) }), async (req, res) => {
+  const post = await loadEvent(req);
+  const prev = await Rsvp.findOne({ post: post._id, user: req.user._id });
+  const { status } = req.body;
+  if (prev?.status !== status) {
+    const inc = { [`event.${status}`]: 1, ...(prev && { [`event.${prev.status}`]: -1 }) };
+    // Capacity is enforced atomically: the counter only moves if there's still room.
+    const cap = status === 'going' && post.event.capacity ? { 'event.going': { $lt: post.event.capacity } } : {};
+    const r = await Post.updateOne({ _id: post._id, ...cap }, { $inc: inc });
+    if (!r.modifiedCount) throw errors.conflict('Sorry, this event is full.', 'EVENT_FULL');
+    await Rsvp.updateOne({ post: post._id, user: req.user._id }, { status }, { upsert: true });
+    notify({ user: post.author, actor: req.user._id, type: 'rsvp', ref: post._id, link: `/post/${post._id}`, dedupe: true,
+      message: `${req.user.name} is ${status === 'going' ? 'going to' : 'interested in'} your event “${clip(post.title)}”` });
+  }
+  res.json(await rsvpCounts(post._id, req.user._id));
+});
+
+postsRouter.delete('/:id/rsvp', validate({ params: idParams }), async (req, res) => {
+  const post = await loadEvent(req);
+  const prev = await Rsvp.findOneAndDelete({ post: post._id, user: req.user._id });
+  if (prev) await Post.updateOne({ _id: post._id }, { $inc: { [`event.${prev.status}`]: -1 } });
+  res.json(await rsvpCounts(post._id, req.user._id));
+});
+
+postsRouter.get('/:id/rsvps', validate({ params: idParams }), async (req, res) => {
+  const post = await loadVisiblePost(req);
+  const rows = await Rsvp.find({ post: post._id }).sort({ createdAt: 1 }).limit(200).populate('user', 'name avatarUrl role').lean();
+  res.json({ people: rows.filter((x) => x.user).map((x) => ({ id: x.user._id, name: x.user.name, avatarUrl: x.user.avatarUrl, status: x.status })) });
+});
+
+postsRouter.post('/:id/offers', commentLimiter, validate({ params: idParams, body: z.strictObject({ message: z.string().trim().max(500).optional() }) }), async (req, res) => {
+  const post = await loadVisiblePost(req, { allowOwnHidden: false });
+  if (post.category !== 'help') throw errors.badRequest('You can only offer help on help requests.', 'NOT_HELP');
+  if (post.author.equals(req.user._id)) throw errors.badRequest('You can’t offer help on your own request.', 'SELF_OFFER');
+  if (post.help?.status !== 'open') throw errors.badRequest('This request is already resolved.', 'RESOLVED');
+  try {
+    await HelpOffer.create({ post: post._id, user: req.user._id, message: req.body.message });
+  } catch (err) {
+    if (err.code === 11000) throw errors.conflict('You already offered to help.', 'ALREADY_OFFERED');
+    throw err;
+  }
+  await Post.updateOne({ _id: post._id }, { $inc: { 'help.offers': 1 } });
+  notify({ user: post.author, actor: req.user._id, type: 'help_offer', ref: post._id, link: `/post/${post._id}`,
+    message: `${req.user.name} offered to help${req.body.message ? `: “${clip(req.body.message)}”` : ' with your request'}` });
+  res.status(201).json({ offers: (post.help?.offers ?? 0) + 1, myOffer: true });
+});
+
+postsRouter.get('/:id/offers', validate({ params: idParams }), async (req, res) => {
+  const post = await loadVisiblePost(req);
+  if (!post.author.equals(req.user._id) && !can(req.user.role, 'content:moderate')) throw errors.forbidden('Only the person who asked can see who offered.');
+  const rows = await HelpOffer.find({ post: post._id }).sort({ createdAt: 1 }).populate('user', 'name avatarUrl').lean();
+  res.json({ offers: rows.filter((x) => x.user).map((x) => ({ id: x._id, message: x.message, createdAt: x.createdAt, user: { id: x.user._id, name: x.user.name, avatarUrl: x.user.avatarUrl } })) });
 });
