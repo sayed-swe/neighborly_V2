@@ -14,7 +14,11 @@ import { connectDB, disconnectDB } from '../config/db.js';
 import { User } from '../modules/users/user.model.js';
 import { Session } from '../modules/auth/session.model.js';
 import { AuditEvent } from '../modules/audit/audit.model.js';
-import { Post, Comment, Reaction, Report } from '../modules/posts/models.js';
+import { Post, Comment, Reaction, Report, Rsvp, HelpOffer } from '../modules/posts/models.js';
+import { Service, Review, ServiceRequest } from '../modules/services/models.js';
+import { Conversation, Message } from '../modules/messages/messages.routes.js';
+import { Notification } from '../modules/notifications/notification.model.js';
+import { Alert } from '../modules/alerts/alerts.routes.js';
 import { approximate, point } from '../utils/geo.js';
 
 const DEMO_DOMAIN = '@demo.neighborly.test';
@@ -98,6 +102,24 @@ const POSTS = [
   ['jamal', 'sale', 3.9, 'Original iPhone 15 Pro only 500 BDT!!! DM me to order, advance payment via bKash only.', { key: 'scam', status: 'removed', mod: 'Scam / fraudulent listing' }],
   ['mehedi', 'general', 5.7, 'This landlord is a thief, everyone should go to his house and shout at him.', { key: 'harass', status: 'hidden', mod: 'Harassment / incitement' }],
 ];
+// Typed details for marketplace, lost & found, events and help requests (matched by text start)
+const at = (days, hour) => { const d = new Date(Date.now() + days * DAY); d.setHours(hour, 0, 0, 0); return d; };
+const TYPED = {
+  'Dhanmondi Lake cleanup': { title: 'Dhanmondi Lake cleanup', event: { startsAt: at(3, 8), endsAt: at(3, 11), place: 'Dhanmondi Lake, gate 2', capacity: 40 } },
+  'Friday evening cricket': { title: 'Friday evening cricket', event: { startsAt: at(2, 17), endsAt: at(2, 19), place: 'Dhanmondi field' } },
+  'Book swap meetup': { title: 'Neighbourhood book swap', event: { startsAt: at(-6, 16), endsAt: at(-6, 18), place: 'Café on Road 8' } },
+  'Gulshan Lake morning walk': { title: 'Gulshan Lake morning walk', event: { startsAt: at(1, 6), endsAt: at(1, 7), place: 'Gulshan Lake park, north gate' } },
+  'Nearly new mountain bicycle': { title: 'Mountain bicycle, 21 gears', listing: { kind: 'sell', condition: 'like-new', status: 'available' } },
+  'Study table and chair': { title: 'Solid wood study table + chair', listing: { kind: 'sell', condition: 'good', status: 'reserved' } },
+  'Giving away a box': { title: 'Children’s story books (free)', listing: { kind: 'free', condition: 'good', status: 'available' } },
+  'Selling my two-year-old split AC': { title: '1.5 ton split AC', listing: { kind: 'sell', condition: 'good', status: 'sold' } },
+  'Original iPhone 15 Pro': { title: 'iPhone 15 Pro', listing: { kind: 'sell', condition: 'new', status: 'available' } },
+  'LOST: grey tabby cat': { title: 'Grey tabby cat “Mishti”', lost: { kind: 'lost', place: 'Kalabagan playground', date: at(-2, 18), status: 'open' } },
+  'FOUND: a black school bag': { title: 'Black school bag', lost: { kind: 'found', place: 'Dhanmondi Lake gate 3', date: at(-5, 16), status: 'reunited' } },
+  'FOUND: a set of keys': { title: 'Keys with a blue keychain', lost: { kind: 'found', place: 'Banani 11 playground', date: at(-5, 9), status: 'open' } },
+};
+const helpStatus = (text) => (/carpenter|pharmacy/.test(text) ? 'resolved' : 'open');
+
 // Shares: [author, index-of-original (by text start), text]
 const SHARES = [
   ['sadia', 'DESCO has announced', 'Important for everyone on Road 27.'],
@@ -144,6 +166,18 @@ async function reset() {
     Comment.deleteMany({ _id: { $in: commentIds } }),
     Post.deleteMany({ $or: [{ _id: { $in: postIds } }, { sharedFrom: { $in: postIds } }] }),
     Session.deleteMany({ user: { $in: userIds } }),
+    Rsvp.deleteMany({ $or: [{ user: { $in: userIds } }, { post: { $in: postIds } }] }),
+    HelpOffer.deleteMany({ $or: [{ user: { $in: userIds } }, { post: { $in: postIds } }] }),
+    Review.deleteMany({ author: { $in: userIds } }),
+    ServiceRequest.deleteMany({ $or: [{ requester: { $in: userIds } }, { provider: { $in: userIds } }] }),
+    Service.deleteMany({ provider: { $in: userIds } }),
+    Notification.deleteMany({ $or: [{ user: { $in: userIds } }, { actor: { $in: userIds } }] }),
+    Alert.deleteMany({ createdBy: { $in: userIds } }),
+    (async () => {
+      const convs = await Conversation.find({ members: { $in: userIds } }).select('_id').lean();
+      await Message.deleteMany({ conversation: { $in: convs.map((c) => c._id) } });
+      await Conversation.deleteMany({ _id: { $in: convs.map((c) => c._id) } });
+    })(),
     AuditEvent.deleteMany({ $or: [{ user: { $in: userIds } }, { actor: { $in: userIds } }] }),
   ]);
   await User.deleteMany({ _id: { $in: userIds } });
@@ -183,7 +217,11 @@ try {
   const postDocs = POSTS.map(([a, category, d, text, extra = {}]) => {
     const author = byFirst(a);
     const at = ago(d);
+    const typed = Object.entries(TYPED).find(([k]) => text.startsWith(k))?.[1] ?? {};
     return {
+      ...typed,
+      ...(category === 'event' && typed.event && { event: { ...typed.event, going: 0, interested: 0 } }),
+      ...(category === 'help' && { help: { status: helpStatus(text), offers: 0 } }),
       author: author._id, text, category, price: extra.price, areaName: author.location.areaName, location: author.location.approx,
       status: extra.status ?? 'active',
       moderation: extra.mod ? { by: byFirst('tanvir')._id, reason: extra.mod, at: new Date(at.getTime() + 3 * 3600e3) } : undefined,
@@ -300,6 +338,102 @@ try {
     R('jamal', 'post', promo, 'spam', undefined, 'dismissed', { ...handled, note: 'Legitimate local business', daysAgo: 0.6 }),
   ]);
   console.log('🚩 9 reports (5 open)');
+
+  /* ---- RSVPs & help offers ---- */
+  const rsvps = [];
+  for (const ev of posts.filter((p) => p.category === 'event' && p.event?.startsAt && p.status === 'active')) {
+    const pool = activeUsers.filter((u) => !u._id.equals(ev.author) && Math.abs(u.location.approx.coordinates[1] - ev.location.coordinates[1]) < 0.04);
+    let going = 0; let interested = 0;
+    for (const u of pool) {
+      if (!chance(0.6)) continue;
+      const status = chance(0.65) ? 'going' : 'interested';
+      if (status === 'going') going++; else interested++;
+      rsvps.push({ post: ev._id, user: u._id, status, createdAt: new Date(ev.createdAt.getTime() + rand() * 20 * 3600e3) });
+    }
+    await Post.updateOne({ _id: ev._id }, { 'event.going': going, 'event.interested': interested });
+  }
+  await Rsvp.insertMany(rsvps);
+  const offers = [];
+  for (const h of posts.filter((p) => p.category === 'help' && p.status === 'active')) {
+    const helpers = activeUsers.filter((u) => !u._id.equals(h.author) && Math.abs(u.location.approx.coordinates[1] - h.location.coordinates[1]) < 0.04 && chance(0.3)).slice(0, 3);
+    helpers.forEach((u) => offers.push({ post: h._id, user: u._id, message: pick(['I can help, sending you a message.', 'I have one you can borrow.', 'I know someone, will share their number.', '']) || undefined, createdAt: new Date(h.createdAt.getTime() + 2 * 3600e3) }));
+    await Post.updateOne({ _id: h._id }, { 'help.offers': helpers.length });
+  }
+  await HelpOffer.insertMany(offers);
+  console.log(`📅 ${rsvps.length} RSVPs · 🤝 ${offers.length} help offers`);
+
+  /* ---- services, reviews & requests ---- */
+  const SERVICES = [
+    ['karim', 'Electrical repairs & wiring', 'electrician', 'Fans, lights, sockets, AC installation and short-circuit repair. Same-day visits within 3 km.', 'Visit ৳300, parts extra', '9 AM – 9 PM, every day', true],
+    ['karim', 'AC servicing', 'appliance-repair', 'Gas refill, cleaning and seasonal servicing for split and window ACs.', 'From ৳1,200', '10 AM – 6 PM', false],
+    ['rafiq', 'Rafiq Plumbing', 'plumber', 'Leaking taps, blocked drains, water-tank cleaning and pipe fitting.', 'Free estimate', '8 AM – 8 PM', true],
+    ['anika', 'Maths coaching, Class 8–10', 'tutoring', 'Small groups of up to 6 students. SSC preparation and weekly tests.', '৳2,500 / month', 'Sun, Tue, Thu 5–7 PM', false],
+    ['rina', 'Rina’s Kitchen: home catering', 'catering', 'Homemade biryani, tehari and khichuri. Party orders for up to 50 people.', 'From ৳180 per plate', 'Order by 11 AM', true],
+  ];
+  const services = await Service.insertMany(SERVICES.map(([who, name, category, description, priceInfo, hours, verified]) => {
+    const u = byFirst(who);
+    return { provider: u._id, name, category, description, priceInfo, hours, verified, location: u.location.approx, areaName: u.location.areaName, createdAt: ago(10 + rand() * 3), updatedAt: new Date() };
+  }));
+  const REVIEW_TEXT = { 5: ['Excellent, quick and tidy work.', 'Came on time and fixed it properly. Highly recommend.', 'Very honest pricing.'], 4: ['Good job, slightly late.', 'Reliable, would call again.'], 3: ['Fine, but took two visits.'] };
+  const reviews = [];
+  for (const sv of services) {
+    const near = activeUsers.filter((u) => !u._id.equals(sv.provider) && Math.abs(u.location.approx.coordinates[1] - sv.location.coordinates[1]) < 0.04);
+    for (const u of near.filter(() => chance(0.55))) {
+      const rating = pick([5, 5, 5, 4, 4, 3]);
+      reviews.push({ service: sv._id, author: u._id, rating, text: pick(REVIEW_TEXT[rating]), createdAt: ago(rand() * 9) });
+    }
+  }
+  await Review.insertMany(reviews);
+  for (const sv of services) {
+    const mine = reviews.filter((v) => v.service.equals(sv._id));
+    await Service.updateOne({ _id: sv._id }, { ratingCount: mine.length, ratingAvg: mine.length ? mine.reduce((a, v) => a + v.rating, 0) / mine.length : 0 });
+  }
+  const svc = (name) => services.find((x) => x.name.startsWith(name));
+  await ServiceRequest.insertMany([
+    { service: svc('Electrical')._id, requester: byFirst('rahim')._id, provider: byFirst('karim')._id, details: 'Ceiling fan in the bedroom makes a grinding noise and slows down.', preferredTime: 'Tomorrow evening', status: 'pending', createdAt: ago(0.3) },
+    { service: svc('Rafiq')._id, requester: byFirst('sadia')._id, provider: byFirst('rafiq')._id, details: 'Kitchen sink drain is completely blocked.', preferredTime: 'Any time today', status: 'accepted', providerNote: 'Coming at 4 PM with tools.', createdAt: ago(1.2) },
+    { service: svc('Maths')._id, requester: byFirst('farhana')._id, provider: byFirst('anika')._id, details: 'My son is in Class 9 and needs help with algebra before SSC.', preferredTime: 'Weekday evenings', status: 'done', createdAt: ago(6) },
+    { service: svc('Electrical')._id, requester: byFirst('mehedi')._id, provider: byFirst('karim')._id, details: 'Two sockets in the living room stopped working.', status: 'declined', providerNote: 'Fully booked this week, sorry!', createdAt: ago(3) },
+  ]);
+  console.log(`🛠  ${services.length} services · ⭐ ${reviews.length} reviews · 4 service requests`);
+
+  /* ---- conversations ---- */
+  const CHATS = [
+    ['rahim', 'mehedi', [['rahim', 'Hi! Is the bicycle still available?'], ['mehedi', 'Yes it is. Want to see it this evening?'], ['rahim', 'Perfect, around 6?'], ['mehedi', 'Sure, Road 8, house 12. See you then.']]],
+    ['sadia', 'rafiq', [['sadia', 'Thanks for accepting. The building gate code is 2741.'], ['rafiq', 'Noted, I’ll be there at 4.']]],
+    ['farhana', 'tanvir', [['farhana', 'Is the lake cleanup still on if it rains?'], ['tanvir', 'Light rain is fine. If it storms we’ll move it to Sunday and post an update.']]],
+    ['karim', 'rahim', [['karim', 'Got your request about the fan. I can come tomorrow at 7 PM.']]],
+  ];
+  for (const [a, b, lines] of CHATS) {
+    const ua = byFirst(a); const ub = byFirst(b);
+    const conv = await Conversation.create({ key: [String(ua._id), String(ub._id)].sort().join(':'), members: [ua._id, ub._id] });
+    const start = ago(0.2 + rand() * 1.5);
+    const msgs = await Message.insertMany(lines.map(([who, body], i) => ({ conversation: conv._id, sender: byFirst(who)._id, body, createdAt: new Date(start.getTime() + i * 7 * 60e3) })));
+    const last = msgs.at(-1);
+    const otherOfLast = last.sender.equals(ua._id) ? ub._id : ua._id;
+    await Conversation.updateOne({ _id: conv._id }, { lastMessage: { text: last.body, sender: last.sender, at: last.createdAt }, unread: { [String(otherOfLast)]: 1 } });
+  }
+  console.log(`✉️  ${CHATS.length} conversations`);
+
+  /* ---- an active emergency alert + notifications ---- */
+  const alertAt = ago(0.08);
+  const alert = await Alert.create({
+    createdBy: mod._id, title: 'Water main burst on Road 27', severity: 'high', place: 'Road 27, near the mosque',
+    message: 'WASA is repairing a burst main. Expect low water pressure until about 8 PM and avoid the flooded section of the road.',
+    location: mod.location.approx, areaName: mod.location.areaName, radiusKm: 4, expiresAt: new Date(Date.now() + 10 * 3600e3), createdAt: alertAt,
+  });
+  const inRange = activeUsers.filter((u) => !u._id.equals(mod._id) && Math.abs(u.location.approx.coordinates[1] - alert.location.coordinates[1]) < 0.03);
+  await Alert.updateOne({ _id: alert._id }, { notified: inRange.length });
+  const notes = inRange.map((u) => ({ user: u._id, actor: mod._id, type: 'alert', ref: alert._id, link: '/alerts', message: `⚠ ${alert.title}`, createdAt: alertAt, updatedAt: alertAt }));
+  for (const c of allComments.filter((x) => x.createdAt > ago(3) && !x.text.startsWith('You are all idiots'))) {
+    const p = [...posts, ...sharePosts].find((x) => x._id.equals(c.post));
+    if (!p || p.author.equals(c.author)) continue;
+    const actor = users.find((u) => u._id.equals(c.author));
+    notes.push({ user: p.author, actor: c.author, type: c.parent ? 'reply' : 'comment', ref: c._id, link: `/post/${p._id}`, message: `${actor.name} commented on your post: “${c.text.slice(0, 50)}”`, read: chance(0.4), createdAt: c.createdAt, updatedAt: c.createdAt });
+  }
+  notes.push({ user: byFirst('karim')._id, actor: byFirst('rahim')._id, type: 'service_request', link: '/services?tab=requests', message: 'Rahim Ahmed requested “Electrical repairs & wiring”', createdAt: ago(0.3), updatedAt: ago(0.3) });
+  await Notification.insertMany(notes);
+  console.log(`🚨 1 active alert · 🔔 ${notes.length} notifications`);
 
   /* ---- audit trail ---- */
   const admin = await User.findOne({ role: 'admin' }).select('_id').lean();
