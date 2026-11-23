@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { clean } from '../../utils/profanity.js';
 import { SELF_SIGNUP_ROLES, SERVICE_CATEGORIES } from '../users/user.model.js';
 
 export const email = z.string().trim().toLowerCase().max(254).email('Enter a valid email address');
@@ -10,12 +11,12 @@ export const password = z
   .refine((v) => /[a-zA-Z]/.test(v) && /\d/.test(v), 'Include at least one letter and one number')
   .refine((v) => !/^(.)\1+$/.test(v), 'Password is too repetitive');
 
-export const name = z
+export const name = clean(z
   .string()
   .trim()
   .min(2, 'Name is too short')
   .max(60, 'Name is too long')
-  .regex(/^[\p{L}\p{M}' .-]+$/u, 'Use letters, spaces, apostrophes or hyphens only');
+  .regex(/^[\p{L}\p{M}' .-]+$/u, 'Use letters, spaces, apostrophes or hyphens only'));
 
 const token = z.string().min(20).max(200);
 

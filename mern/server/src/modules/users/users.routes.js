@@ -11,13 +11,14 @@ import { name } from '../auth/auth.schemas.js';
 import { approximate, point } from '../../utils/geo.js';
 import { errors } from '../../utils/AppError.js';
 import { clearRefreshCookie } from '../auth/token.service.js';
+import { clean } from '../../utils/profanity.js';
 
 const r = Router();
 r.use(authenticate, requireVerified);
 
 const profileSchema = z.strictObject({
   name: name.optional(),
-  bio: z.string().trim().max(280).optional(),
+  bio: clean(z.string().trim().max(280)).optional(),
   provider: z
     .strictObject({
       businessName: z.string().trim().min(2).max(80),
