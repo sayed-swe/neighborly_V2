@@ -7,6 +7,7 @@ import { randomToken, sha256 } from '../../utils/crypto.js';
 import { emails } from '../../utils/mailer.js';
 import { audit } from '../audit/audit.service.js';
 import { assertNotPwned } from '../../utils/pwned.js';
+import { describeDevice } from '../../utils/device.js';
 import {
   REFRESH_COOKIE, signAccessToken, createSession, rotateRefreshToken, revokeAllForUser,
   setRefreshCookie, clearRefreshCookie, findSessionByToken,
@@ -124,7 +125,25 @@ export async function login(req, res) {
   user.failedLoginCount = 0;
   user.lockUntil = undefined;
   audit(req, 'login', { user: user._id });
+  const newDevice = await isNewDevice(user, req);
   await signIn(req, res, user);
+  if (newDevice) {
+    const when = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' });
+    emails.newSignIn(user, { device: describeDevice(req.get('user-agent')), ip: req.ip, when: `${when} (Dhaka time)`, url: clientUrl('/settings') }).catch(() => {});
+  }
+}
+
+/**
+ * A device is "new" when no session in the last 30 days (kept until expiry, even
+ * after sign-out) came from the same browser. The very first sign-in never alerts.
+ */
+async function isNewDevice(user, req) {
+  const ua = req.get('user-agent')?.slice(0, 300);
+  const [any, same] = await Promise.all([
+    Session.exists({ user: user._id }),
+    Session.exists({ user: user._id, userAgent: ua }),
+  ]);
+  return Boolean(any) && !same;
 }
 
 export async function refresh(req, res) {
