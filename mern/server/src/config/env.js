@@ -31,6 +31,8 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   NOMINATIM_URL: z.string().url().default('https://nominatim.openstreetmap.org'),
+  // Reject passwords found in public data breaches (haveibeenpwned.com). On by default outside tests.
+  PWNED_PASSWORD_CHECK: bool.optional(),
 });
 
 // Treat empty values in .env (e.g. `SMTP_HOST=`) as unset
@@ -49,6 +51,7 @@ env.COOKIE_SECURE = env.COOKIE_SECURE ?? env.isProd;
 env.smtpEnabled = Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
 env.MAIL_FROM ??= env.SMTP_USER ? `Neighborly <${env.SMTP_USER}>` : 'Neighborly <no-reply@neighborly.local>';
 env.googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+env.pwnedCheck = env.PWNED_PASSWORD_CHECK ?? !env.isTest;
 env.allowedOrigins = [env.CLIENT_URL, ...env.EXTRA_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)];
 
 if (env.isProd && !env.MONGODB_URI) {

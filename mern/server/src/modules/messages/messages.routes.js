@@ -6,6 +6,7 @@ import { authenticate, requireVerified } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { commentLimiter } from '../../middleware/security.js';
 import { errors } from '../../utils/AppError.js';
+import { clean } from '../../utils/profanity.js';
 
 const { Schema } = mongoose;
 
@@ -99,7 +100,7 @@ r.get('/:id/messages', validate({ params: z.strictObject({ id: oid }), query: z.
   });
 });
 
-r.post('/:id/messages', commentLimiter, validate({ params: z.strictObject({ id: oid }), body: z.strictObject({ body: z.string().trim().min(1, 'Write a message').max(2000) }) }), async (req, res) => {
+r.post('/:id/messages', commentLimiter, validate({ params: z.strictObject({ id: oid }), body: z.strictObject({ body: clean(z.string().trim().min(1, 'Write a message').max(2000)) }) }), async (req, res) => {
   const c = await loadConversation(req);
   const other = c.members.find((m) => !m.equals(req.user._id));
   const otherUser = await User.findById(other).select('status');
