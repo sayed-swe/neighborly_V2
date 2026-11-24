@@ -6,6 +6,7 @@ import { errors } from '../../utils/AppError.js';
 import { randomToken, sha256 } from '../../utils/crypto.js';
 import { emails } from '../../utils/mailer.js';
 import { audit } from '../audit/audit.service.js';
+import { assertNotPwned } from '../../utils/pwned.js';
 import {
   REFRESH_COOKIE, signAccessToken, createSession, rotateRefreshToken, revokeAllForUser,
   setRefreshCookie, clearRefreshCookie, findSessionByToken,
@@ -45,6 +46,7 @@ const GENERIC_REGISTER = { message: 'Check your inbox for a link to confirm your
 
 export async function register(req, res) {
   const { name, email, password, role, businessName, serviceCategory } = req.body;
+  await assertNotPwned(password);
   const existing = await User.findOne({ email });
   if (existing) {
     if (existing.emailVerified) {
@@ -186,6 +188,7 @@ export async function resetPassword(req, res) {
     passwordResetExpires: { $gt: new Date() },
   });
   if (!user) throw errors.badRequest('This reset link is invalid or has expired.', 'INVALID_TOKEN');
+  await assertNotPwned(req.body.password);
 
   user.passwordHash = await hashPassword(req.body.password);
   user.hasPassword = true;
@@ -210,6 +213,7 @@ export async function changePassword(req, res) {
   if (!(await bcrypt.compare(req.body.currentPassword, user.passwordHash))) {
     throw errors.badRequest('Current password is incorrect', 'VALIDATION_ERROR', { fields: { currentPassword: 'Current password is incorrect' } });
   }
+  await assertNotPwned(req.body.newPassword, 'newPassword');
   user.passwordHash = await hashPassword(req.body.newPassword);
   user.passwordChangedAt = new Date();
   user.tokenVersion += 1;
