@@ -31,6 +31,11 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   NOMINATIM_URL: z.string().url().default('https://nominatim.openstreetmap.org'),
+  // Cloudinary image storage. Leave empty to keep photos on the server's own disk.
+  CLOUDINARY_CLOUD_NAME: z.string().regex(/^[a-z0-9_-]+$/i, 'CLOUDINARY_CLOUD_NAME looks wrong').optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_FOLDER: z.string().regex(/^[a-z0-9_-]+$/i).default('neighborly'),
 });
 
 // Treat empty values in .env (e.g. `SMTP_HOST=`) as unset
@@ -49,6 +54,7 @@ env.COOKIE_SECURE = env.COOKIE_SECURE ?? env.isProd;
 env.smtpEnabled = Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
 env.MAIL_FROM ??= env.SMTP_USER ? `Neighborly <${env.SMTP_USER}>` : 'Neighborly <no-reply@neighborly.local>';
 env.googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+env.cloudinaryEnabled = Boolean(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET);
 env.allowedOrigins = [env.CLIENT_URL, ...env.EXTRA_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)];
 
 if (env.isProd && !env.MONGODB_URI) {
