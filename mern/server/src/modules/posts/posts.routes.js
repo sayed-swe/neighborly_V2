@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import fs from 'node:fs';
-import path from 'node:path';
 import mongoose from 'mongoose';
 import { User } from '../users/user.model.js';
 import { Post, Comment, Reaction, Report, Rsvp, HelpOffer, CATEGORIES, REACTION_TYPES, REPORT_REASONS, LISTING_TYPES, CONDITIONS, LISTING_STATUS, LF_TYPES, RSVP_TYPES } from './models.js';
@@ -13,7 +11,7 @@ import { errors } from '../../utils/AppError.js';
 import { distanceKm } from '../../utils/geo.js';
 import { can } from '../../config/permissions.js';
 import { audit } from '../audit/audit.service.js';
-import { IMAGE_URL, UPLOAD_DIR } from '../uploads/uploads.routes.js';
+import { imageExists, isImageUrl } from '../uploads/storage.js';
 import { clean } from '../../utils/profanity.js';
 
 export const postsRouter = Router();
@@ -126,7 +124,7 @@ async function loadVisiblePost(req, { allowOwnHidden = true } = {}) {
 }
 
 const text = clean(z.string().trim().max(2000, 'Keep posts under 2,000 characters').transform((v) => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')));
-const images = z.array(z.string().regex(IMAGE_URL, 'Invalid image')).max(4, 'Up to 4 photos');
+const images = z.array(z.string().refine((u) => isImageUrl(u), 'Invalid image')).max(4, 'Up to 4 photos');
 
 const typedFields = {
   title: clean(z.string().trim().min(2, 'Add a short title').max(150)).optional(),
@@ -221,8 +219,7 @@ postsRouter.post('/', postLimiter, validate({ body: createSchema }), async (req,
 
 async function assertImagesExist(list) {
   for (const url of list) {
-    try { await fs.promises.access(path.join(UPLOAD_DIR, path.basename(url))); }
-    catch { throw errors.badRequest('One of the photos is no longer available. Upload it again.', 'BAD_IMAGE'); }
+    if (!(await imageExists(url))) throw errors.badRequest('One of the photos is no longer available. Upload it again.', 'BAD_IMAGE');
   }
 }
 
