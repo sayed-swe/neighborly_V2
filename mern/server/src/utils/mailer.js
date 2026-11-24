@@ -110,6 +110,19 @@ export const emails = {
         url,
       }),
     }),
+  newSignIn: (user, { device, ip, when, url }) =>
+    sendMail({
+      to: user.email,
+      subject: 'New sign-in to your Neighborly account',
+      text: `Hi ${user.name},\n\nYour account was just signed in from a new device:\n${device}${ip ? ` (IP ${ip})` : ''}, ${when}\n\nIf this was you, you can ignore this email. If not, change your password and sign that device out here:\n${url}`,
+      html: layout({
+        heading: 'New sign-in on a new device',
+        body: `Your account was just signed in from <strong>${escapeHtml(device)}</strong>${ip ? ` (IP ${escapeHtml(ip)})` : ''}, ${escapeHtml(when)}.`,
+        cta: 'Review your devices',
+        url,
+        footnote: "If this was you, there's nothing to do. If not, change your password and sign that device out.",
+      }),
+    }),
   passwordChanged: (user) =>
     sendMail({
       to: user.email,

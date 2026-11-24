@@ -12,6 +12,7 @@ import { greeting, timeAgo } from '@/lib/format';
 import { CATEGORIES } from '@/lib/categories';
 import { SERVICE_CATEGORIES } from '@/lib/schemas';
 import AreaMap from '@/components/map';
+import InstallApp from '@/components/InstallApp';
 import { Avatar, Spinner, useToast } from '@/components/ui';
 
 const QUICK = [
@@ -193,6 +194,7 @@ export default function HomePage() {
             <RadiusControl />
             <p className="tiny muted" style={{ marginTop: 8 }}>The shaded spot is the approximate area neighbours see, not your exact home.</p>
           </section>
+          <InstallApp />
           <Checklist />
         </div>
       </div>
