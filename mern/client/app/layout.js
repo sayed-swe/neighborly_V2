@@ -1,5 +1,6 @@
 import { Fraunces, Instrument_Sans } from 'next/font/google';
 import Providers from './providers';
+import ServiceWorker from '@/components/ServiceWorker';
 import './globals.css';
 import './landing.css';
 import './auth.css';
@@ -27,6 +28,7 @@ export default function RootLayout({ children }) {
       <body>
         <a href="#main" className="skip-link">Skip to content</a>
         <Providers>{children}</Providers>
+        <ServiceWorker />
       </body>
     </html>
   );
