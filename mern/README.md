@@ -141,3 +141,20 @@ The notification bell covers reactions, comments, replies, shares, RSVPs, help o
 ## Deployment (Phase 3)
 
 MongoDB Atlas M0 · Render (API, `TRUST_PROXY=1`) · Vercel (web, `API_URL` = Render URL) · Brevo/Resend SMTP. All free tiers.
+
+### Photo storage
+
+Photos are stripped of EXIF/GPS data and then saved by `server/src/modules/uploads/storage.js`:
+
+- **Cloudinary** (free tier) when `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are set. Use this in production: Render's disk is wiped on every deploy, so photos saved there disappear. Uploads are signed on the server, so the API secret never reaches the browser.
+- **Local disk** (`server/uploads/`) otherwise, for development and tests.
+
+Posts only accept photo URLs this server issued: `/api/uploads/…` or files in your own Cloudinary cloud and folder.
+
+Moving to Cloudinary after photos were already uploaded locally:
+
+```bash
+cd server
+npm run migrate:uploads -- --dry-run   # shows how many photos would move
+npm run migrate:uploads                # uploads them and updates the posts
+```

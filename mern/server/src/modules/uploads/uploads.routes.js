@@ -1,14 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
-import fs from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
 import { authenticate, requireVerified } from '../../middleware/auth.js';
 import { uploadLimiter } from '../../middleware/security.js';
-import { errors } from '../../utils/AppError.js';
+import { AppError, errors } from '../../utils/AppError.js';
+import { UPLOAD_DIR, saveImage } from './storage.js';
 
-export const UPLOAD_DIR = path.resolve(import.meta.dirname, '../../../uploads');
-export const IMAGE_URL = /^\/api\/uploads\/[a-f0-9]{32}\.(jpg|png)$/;
+export { UPLOAD_DIR, isImageUrl } from './storage.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 } });
 
@@ -69,10 +67,12 @@ async (req, res) => {
   if (!req.file) throw errors.badRequest('Choose an image to upload.', 'BAD_UPLOAD');
   let clean;
   try { clean = sanitizeImage(req.file.buffer); } catch { throw errors.badRequest('Only JPEG or PNG images are allowed.', 'BAD_IMAGE'); }
-  const name = `${randomBytes(16).toString('hex')}.${clean.ext}`;
-  await fs.mkdir(UPLOAD_DIR, { recursive: true });
-  await fs.writeFile(path.join(UPLOAD_DIR, name), clean.data, { flag: 'wx' });
-  res.status(201).json({ url: `/api/uploads/${name}` });
+  let url;
+  try { url = await saveImage(clean); } catch (e) {
+    console.error(e.message);
+    throw new AppError(502, 'STORAGE_UNAVAILABLE', 'Could not save the photo right now. Please try again.');
+  }
+  res.status(201).json({ url });
 });
 
 // Public by unguessable name so <img> tags work without auth headers.
