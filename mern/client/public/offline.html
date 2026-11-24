@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f4d3a">
+<title>You're offline · Neighborly</title>
+<link rel="icon" href="/icon.svg">
+<style>
+  :root { --paper: #f6f1e8; --surface: #fffdf9; --ink: #1c2420; --muted: #66706a; --line: #e4dacb; --green: #1f4d3a; }
+  @media (prefers-color-scheme: dark) { :root { --paper: #121815; --surface: #1a221e; --ink: #ecefe9; --muted: #a3ada7; --line: #2c3631; --green: #7fc29d; } }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--paper); color: var(--ink);
+         font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  main { max-width: 420px; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 32px 24px; text-align: center; }
+  img { width: 56px; height: 56px; }
+  h1 { font-family: Georgia, serif; font-size: 26px; margin: 16px 0 8px; }
+  p { color: var(--muted); line-height: 1.5; margin: 0 0 24px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: 12px 20px; background: var(--green); color: var(--paper); cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icon.svg" alt="">
+  <h1>You're offline</h1>
+  <p>Neighborly can't reach the internet right now. Pages you opened recently still work. Check your connection and try again.</p>
+  <button onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

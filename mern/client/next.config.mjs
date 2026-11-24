@@ -36,7 +36,11 @@ const nextConfig = {
       headers.push({ key: 'Content-Security-Policy', value: csp });
       headers.push({ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' });
     }
-    return [{ source: '/:path*', headers }];
+    return [
+      { source: '/:path*', headers },
+      // The service worker must never be served stale, or app updates would stall.
+      { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] },
+    ];
   },
 };
 
