@@ -28,6 +28,6 @@ export const AUDIT_LABELS = {
   account_locked: 'Account temporarily locked', logout: 'Signed out', logout_all: 'Signed out everywhere',
   password_reset_requested: 'Password reset requested', password_reset: 'Password reset', password_changed: 'Password changed',
   refresh_reuse_detected: 'Suspicious session reuse blocked', session_revoked: 'Device signed out', role_changed: 'Role changed',
-  suspended: 'Account suspended', unsuspended: 'Account restored', location_updated: 'Home area updated', google_linked: 'Google account linked',
+  suspended: 'Account suspended', unsuspended: 'Account restored', location_updated: 'Home area updated', google_linked: 'Google account linked', data_exported: 'Data downloaded',
   post_created: 'Post created', post_hidden: 'Post hidden', post_removed: 'Post removed', post_restored: 'Post restored', comment_removed: 'Comment removed', report_handled: 'Report handled',
 };

@@ -48,4 +48,5 @@ export function requireTrustedOrigin(req, _res, next) {
 export const postLimiter = limiter({ windowMs: 60 * 60_000, limit: 30 });
 export const commentLimiter = limiter({ windowMs: 10 * 60_000, limit: 60 });
 export const uploadLimiter = limiter({ windowMs: 60 * 60_000, limit: 40 });
+export const exportLimiter = limiter({ windowMs: 60 * 60_000, limit: 5 });
 export const reportLimiter = limiter({ windowMs: 60 * 60_000, limit: 20 });

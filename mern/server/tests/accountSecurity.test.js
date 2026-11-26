@@ -84,3 +84,30 @@ describe('new-device sign-in alert', () => {
     expect(describeDevice('')).toBe('a browser on an unknown device');
   });
 });
+
+describe('download my data', () => {
+  const auth = (u) => ({ Authorization: `Bearer ${u.accessToken}` });
+
+  it('returns only my own content as a file, with no secrets or exact home point', async () => {
+    const me = await createVerifiedUser({ email: 'me@example.com', name: 'Me Test' });
+    const other = await createVerifiedUser({ email: 'other@example.com', name: 'Other Test' });
+    for (const u of [me, other]) {
+      await request(app).put('/api/users/me/location').set(auth(u)).send({ lat: 23.7561, lng: 90.3742, areaName: 'Dhanmondi', radiusKm: 3 }).expect(200);
+    }
+    await request(app).post('/api/posts').set(auth(me)).send({ category: 'news', text: 'Road 5 is being repaved this week' }).expect(201);
+    await request(app).post('/api/posts').set(auth(other)).send({ category: 'news', text: 'Not mine to export' }).expect(201);
+
+    const res = await request(app).get('/api/users/me/export').set(auth(me)).expect(200);
+    expect(res.headers['content-disposition']).toMatch(/^attachment; filename="neighborly-data-\d{4}-\d{2}-\d{2}\.json"$/);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body.profile).toMatchObject({ email: 'me@example.com', name: 'Me Test' });
+    expect(res.body.posts.map((p) => p.text)).toEqual(['Road 5 is being repaved this week']);
+    expect(res.body.sessions.length).toBeGreaterThan(0);
+    const raw = JSON.stringify(res.body);
+    for (const secret of ['passwordHash', 'tokenHash', 'tokenVersion', '"home"', 'emailVerifyTokenHash']) expect(raw).not.toContain(secret);
+  });
+
+  it('requires sign-in', async () => {
+    expect((await request(app).get('/api/users/me/export')).status).toBe(401);
+  });
+});
