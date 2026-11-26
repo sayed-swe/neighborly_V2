@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Laptop, LogOut, MapPin, Shield, Smartphone, Trash2, User } from 'lucide-react';
+import { Laptop, LogOut, MapPin, Palette, Shield, Smartphone, Trash2, User } from 'lucide-react';
 import { api, parseError, setAccessToken } from '@/lib/api';
 import { useAuth } from '@/lib/AuthProvider';
 import { applyFieldErrors } from '@/lib/useApplyFieldErrors';
@@ -13,11 +13,13 @@ import { ROLE_LABELS } from '@/lib/permissions';
 import { AUDIT_LABELS, describeDevice, timeAgo } from '@/lib/format';
 import { Alert, Avatar, Button, Field, PasswordField, Spinner, useToast } from '@/components/ui';
 import LocationPicker from '@/components/LocationPicker';
+import { THEME_OPTIONS, getThemePref, setThemePref } from '@/lib/theme';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'location', label: 'Home area', icon: MapPin },
   { id: 'security', label: 'Security', icon: Shield },
+  { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'account', label: 'Account', icon: Trash2 },
 ];
 
@@ -253,6 +255,29 @@ function AccountTab() {
   );
 }
 
+/* ---------------- Appearance ---------------- */
+function AppearanceTab() {
+  const [pref, setPref] = useState('system');
+  useEffect(() => setPref(getThemePref()), []); // localStorage is only readable after mount
+
+  function choose(v) {
+    setPref(v);
+    setThemePref(v);
+  }
+
+  return (
+    <section className="settings-section card card-pad">
+      <h3 className="card-title">Theme</h3>
+      <p className="small muted" style={{ marginBottom: 16 }}>System follows your device’s light or dark setting. Saved on this device only.</p>
+      <div className="seg" role="radiogroup" aria-label="Theme">
+        {THEME_OPTIONS.map(([v, l]) => (
+          <button key={v} type="button" role="radio" aria-checked={pref === v} className={pref === v ? 'is-active' : ''} onClick={() => choose(v)}>{l}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Settings() {
   const params = useSearchParams();
   const router = useRouter();
@@ -264,7 +289,7 @@ function Settings() {
     <div className="settings">
       <header className="page-head">
         <h1>Settings</h1>
-        <p className="muted">Your profile, home area and account security.</p>
+        <p className="muted">Your profile, home area, appearance and account security.</p>
       </header>
       <div className="settings-layout">
         <nav className="settings-tabs" role="tablist" aria-label="Settings sections">
@@ -284,6 +309,7 @@ function Settings() {
             </div>
           )}
           {tab === 'security' && <SecurityTab />}
+          {tab === 'appearance' && <AppearanceTab />}
           {tab === 'account' && <AccountTab />}
         </div>
       </div>

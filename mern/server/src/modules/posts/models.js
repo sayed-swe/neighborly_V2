@@ -50,7 +50,7 @@ const postSchema = new Schema(
       status: { type: String, enum: ['open', 'resolved'] },
       offers: { type: Number, default: 0, min: 0 },
     },
-    images: { type: [{ type: String, maxlength: 80 }], validate: (v) => v.length <= 4 },
+    images: { type: [{ type: String, maxlength: 300 }], validate: (v) => v.length <= 4 },
     // Copied from the author's *approximate* location. Never the exact home.
     location: { type: pointSchema, required: true },
     areaName: { type: String, maxlength: 120 },

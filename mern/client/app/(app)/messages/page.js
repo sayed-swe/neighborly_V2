@@ -64,7 +64,7 @@ function Thread({ id, onSent }) {
       setData((cur) => ({ ...cur, messages: [...cur.messages, d.message] }));
       lastCursor.current = d.message.cursor; setText(''); onSent?.();
       setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
-    } catch (e) { toast(parseError(e).message, 'error'); }
+    } catch (e) { const err = parseError(e); toast(err.fields?.body ?? err.message, 'error'); }
     setSending(false);
   }
 

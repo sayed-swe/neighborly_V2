@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, refreshSession, setAccessToken, setSessionEndHandler } from './api';
+import { clearCachedPages } from '@/components/ServiceWorker';
 
 const AuthContext = createContext(null);
 const hasHint = () => typeof document !== 'undefined' && document.cookie.split('; ').includes('nb_session=1');
@@ -15,6 +16,7 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setUser(null);
     setStatus('anonymous');
+    clearCachedPages();
   }, []);
 
   useEffect(() => {

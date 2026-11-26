@@ -6,7 +6,7 @@ const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.googleusercontent.com",
+  "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.googleusercontent.com https://res.cloudinary.com",
   "font-src 'self'",
   "connect-src 'self'",
   "frame-ancestors 'none'",
@@ -36,7 +36,11 @@ const nextConfig = {
       headers.push({ key: 'Content-Security-Policy', value: csp });
       headers.push({ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' });
     }
-    return [{ source: '/:path*', headers }];
+    return [
+      { source: '/:path*', headers },
+      // The service worker must never be served stale, or app updates would stall.
+      { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] },
+    ];
   },
 };
 

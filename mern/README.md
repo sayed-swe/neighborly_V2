@@ -112,6 +112,8 @@ The notification bell covers reactions, comments, replies, shares, RSVPs, help o
 | Area | What's implemented |
 |---|---|
 | Passwords | bcrypt (cost 12); minimum 10 chars with letters + numbers; strength meter |
+| Breached passwords | Sign-up, reset and change reject passwords found in public breaches via the [Have I Been Pwned](https://haveibeenpwned.com/API/v3#PwnedPasswords) range API. Only a 5-character SHA-1 prefix leaves the server; if the service is down the check is skipped. `PWNED_PASSWORD_CHECK=false` turns it off |
+| New-device alerts | Signing in from a browser not used in the last 30 days emails the owner the device, IP and time, with a link to sign that device out |
 | Sessions | 15-min JWT access token kept **in memory only**. 30-day refresh token in an **httpOnly, SameSite=Strict** cookie scoped to `/api/auth`, stored **hashed** |
 | Token theft | Refresh tokens **rotate** on every use. Replaying an old one revokes that device's whole session family. Concurrent tabs are handled safely |
 | Instant revocation | `tokenVersion` on the user: suspension, role change, password change and "sign out everywhere" invalidate access tokens immediately |
@@ -139,3 +141,20 @@ The notification bell covers reactions, comments, replies, shares, RSVPs, help o
 ## Deployment (Phase 3)
 
 MongoDB Atlas M0 · Render (API, `TRUST_PROXY=1`) · Vercel (web, `API_URL` = Render URL) · Brevo/Resend SMTP. All free tiers.
+
+### Photo storage
+
+Photos are stripped of EXIF/GPS data and then saved by `server/src/modules/uploads/storage.js`:
+
+- **Cloudinary** (free tier) when `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are set. Use this in production: Render's disk is wiped on every deploy, so photos saved there disappear. Uploads are signed on the server, so the API secret never reaches the browser.
+- **Local disk** (`server/uploads/`) otherwise, for development and tests.
+
+Posts only accept photo URLs this server issued: `/api/uploads/…` or files in your own Cloudinary cloud and folder.
+
+Moving to Cloudinary after photos were already uploaded locally:
+
+```bash
+cd server
+npm run migrate:uploads -- --dry-run   # shows how many photos would move
+npm run migrate:uploads                # uploads them and updates the posts
+```

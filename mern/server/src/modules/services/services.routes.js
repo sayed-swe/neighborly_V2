@@ -11,6 +11,7 @@ import { distanceKm } from '../../utils/geo.js';
 import { can } from '../../config/permissions.js';
 import { audit } from '../audit/audit.service.js';
 import { notify, clip } from '../notifications/notify.js';
+import { clean } from '../../utils/profanity.js';
 
 const r = Router();
 r.use(authenticate, requireVerified);
@@ -68,11 +69,11 @@ r.get('/', validate({ query: listQuery }), async (req, res) => {
 });
 
 const serviceBody = z.strictObject({
-  name: z.string().trim().min(2, 'Name your service').max(100),
+  name: clean(z.string().trim().min(2, 'Name your service').max(100)),
   category: z.enum(SERVICE_CATEGORIES),
-  description: z.string().trim().max(1500).default(''),
-  priceInfo: z.string().trim().max(120).optional(),
-  hours: z.string().trim().max(120).optional(),
+  description: clean(z.string().trim().max(1500)).default(''),
+  priceInfo: clean(z.string().trim().max(120)).optional(),
+  hours: clean(z.string().trim().max(120)).optional(),
 });
 
 r.post('/', postLimiter, requirePermission('service:list'), validate({ body: serviceBody }), async (req, res) => {
@@ -97,7 +98,7 @@ r.get('/requests', validate({ query: z.object({ box: z.enum(['incoming', 'outgoi
   });
 });
 
-r.patch('/requests/:id', validate({ params: idParams, body: z.strictObject({ status: z.enum(REQUEST_STATUS), note: z.string().trim().max(500).optional() }) }), async (req, res) => {
+r.patch('/requests/:id', validate({ params: idParams, body: z.strictObject({ status: z.enum(REQUEST_STATUS), note: clean(z.string().trim().max(500)).optional() }) }), async (req, res) => {
   const x = await ServiceRequest.findById(req.valid.params.id).populate('service', 'name');
   if (!x) throw errors.notFound('Request not found');
   const isProvider = x.provider.equals(req.user._id);
@@ -145,7 +146,7 @@ r.delete('/:id', validate({ params: idParams }), async (req, res) => {
 });
 
 /* ------------------------------- reviews ----------------------------- */
-r.post('/:id/reviews', commentLimiter, validate({ params: idParams, body: z.strictObject({ rating: z.number().int().min(1).max(5), text: z.string().trim().max(1000).default('') }) }), async (req, res) => {
+r.post('/:id/reviews', commentLimiter, validate({ params: idParams, body: z.strictObject({ rating: z.number().int().min(1).max(5), text: clean(z.string().trim().max(1000)).default('') }) }), async (req, res) => {
   const s = await Service.findById(req.valid.params.id);
   if (!s || !s.active) throw errors.notFound('Service not found');
   if (s.provider.equals(req.user._id)) throw errors.badRequest('You can’t review your own service.', 'SELF_REVIEW');
@@ -168,7 +169,7 @@ r.delete('/:id/reviews/:reviewId', validate({ params: z.strictObject({ id: oid, 
 });
 
 /* ------------------------------- requests ---------------------------- */
-r.post('/:id/requests', postLimiter, validate({ params: idParams, body: z.strictObject({ details: z.string().trim().min(5, 'Describe what you need').max(1000), preferredTime: z.string().trim().max(120).optional() }) }), async (req, res) => {
+r.post('/:id/requests', postLimiter, validate({ params: idParams, body: z.strictObject({ details: clean(z.string().trim().min(5, 'Describe what you need').max(1000)), preferredTime: clean(z.string().trim().max(120)).optional() }) }), async (req, res) => {
   const s = await Service.findById(req.valid.params.id);
   if (!s || !s.active) throw errors.notFound('Service not found');
   if (s.provider.equals(req.user._id)) throw errors.badRequest('You can’t request your own service.', 'SELF_REQUEST');

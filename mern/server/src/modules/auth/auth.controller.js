@@ -6,6 +6,8 @@ import { errors } from '../../utils/AppError.js';
 import { randomToken, sha256 } from '../../utils/crypto.js';
 import { emails } from '../../utils/mailer.js';
 import { audit } from '../audit/audit.service.js';
+import { assertNotPwned } from '../../utils/pwned.js';
+import { describeDevice } from '../../utils/device.js';
 import {
   REFRESH_COOKIE, signAccessToken, createSession, rotateRefreshToken, revokeAllForUser,
   setRefreshCookie, clearRefreshCookie, findSessionByToken,
@@ -45,6 +47,7 @@ const GENERIC_REGISTER = { message: 'Check your inbox for a link to confirm your
 
 export async function register(req, res) {
   const { name, email, password, role, businessName, serviceCategory } = req.body;
+  await assertNotPwned(password);
   const existing = await User.findOne({ email });
   if (existing) {
     if (existing.emailVerified) {
@@ -122,7 +125,25 @@ export async function login(req, res) {
   user.failedLoginCount = 0;
   user.lockUntil = undefined;
   audit(req, 'login', { user: user._id });
+  const newDevice = await isNewDevice(user, req);
   await signIn(req, res, user);
+  if (newDevice) {
+    const when = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dhaka' });
+    emails.newSignIn(user, { device: describeDevice(req.get('user-agent')), ip: req.ip, when: `${when} (Dhaka time)`, url: clientUrl('/settings') }).catch(() => {});
+  }
+}
+
+/**
+ * A device is "new" when no session in the last 30 days (kept until expiry, even
+ * after sign-out) came from the same browser. The very first sign-in never alerts.
+ */
+async function isNewDevice(user, req) {
+  const ua = req.get('user-agent')?.slice(0, 300);
+  const [any, same] = await Promise.all([
+    Session.exists({ user: user._id }),
+    Session.exists({ user: user._id, userAgent: ua }),
+  ]);
+  return Boolean(any) && !same;
 }
 
 export async function refresh(req, res) {
@@ -186,6 +207,7 @@ export async function resetPassword(req, res) {
     passwordResetExpires: { $gt: new Date() },
   });
   if (!user) throw errors.badRequest('This reset link is invalid or has expired.', 'INVALID_TOKEN');
+  await assertNotPwned(req.body.password);
 
   user.passwordHash = await hashPassword(req.body.password);
   user.hasPassword = true;
@@ -210,6 +232,7 @@ export async function changePassword(req, res) {
   if (!(await bcrypt.compare(req.body.currentPassword, user.passwordHash))) {
     throw errors.badRequest('Current password is incorrect', 'VALIDATION_ERROR', { fields: { currentPassword: 'Current password is incorrect' } });
   }
+  await assertNotPwned(req.body.newPassword, 'newPassword');
   user.passwordHash = await hashPassword(req.body.newPassword);
   user.passwordChangedAt = new Date();
   user.tokenVersion += 1;

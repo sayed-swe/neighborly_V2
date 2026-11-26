@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import fs from 'node:fs';
-import path from 'node:path';
 import mongoose from 'mongoose';
 import { User } from '../users/user.model.js';
 import { Post, Comment, Reaction, Report, Rsvp, HelpOffer, CATEGORIES, REACTION_TYPES, REPORT_REASONS, LISTING_TYPES, CONDITIONS, LISTING_STATUS, LF_TYPES, RSVP_TYPES } from './models.js';
@@ -13,7 +11,8 @@ import { errors } from '../../utils/AppError.js';
 import { distanceKm } from '../../utils/geo.js';
 import { can } from '../../config/permissions.js';
 import { audit } from '../audit/audit.service.js';
-import { IMAGE_URL, UPLOAD_DIR } from '../uploads/uploads.routes.js';
+import { imageExists, isImageUrl } from '../uploads/storage.js';
+import { clean } from '../../utils/profanity.js';
 
 export const postsRouter = Router();
 export const commentsRouter = Router();
@@ -124,16 +123,16 @@ async function loadVisiblePost(req, { allowOwnHidden = true } = {}) {
   return post;
 }
 
-const text = z.string().trim().max(2000, 'Keep posts under 2,000 characters').transform((v) => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ''));
-const images = z.array(z.string().regex(IMAGE_URL, 'Invalid image')).max(4, 'Up to 4 photos');
+const text = clean(z.string().trim().max(2000, 'Keep posts under 2,000 characters').transform((v) => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')));
+const images = z.array(z.string().refine((u) => isImageUrl(u), 'Invalid image')).max(4, 'Up to 4 photos');
 
 const typedFields = {
-  title: z.string().trim().min(2, 'Add a short title').max(150).optional(),
+  title: clean(z.string().trim().min(2, 'Add a short title').max(150)).optional(),
   listing: z.strictObject({ kind: z.enum(LISTING_TYPES).default('sell'), condition: z.enum(CONDITIONS).optional() }).optional(),
-  lost: z.strictObject({ kind: z.enum(LF_TYPES), place: z.string().trim().min(2, 'Where was it?').max(200), date: z.coerce.date().optional() }).optional(),
+  lost: z.strictObject({ kind: z.enum(LF_TYPES), place: clean(z.string().trim().min(2, 'Where was it?').max(200)), date: z.coerce.date().optional() }).optional(),
   event: z.strictObject({
     startsAt: z.coerce.date(), endsAt: z.coerce.date().optional(),
-    place: z.string().trim().min(2, 'Where is it?').max(200), capacity: z.number().int().min(1).max(100000).optional(),
+    place: clean(z.string().trim().min(2, 'Where is it?').max(200)), capacity: z.number().int().min(1).max(100000).optional(),
   }).optional(),
 };
 
@@ -220,8 +219,7 @@ postsRouter.post('/', postLimiter, validate({ body: createSchema }), async (req,
 
 async function assertImagesExist(list) {
   for (const url of list) {
-    try { await fs.promises.access(path.join(UPLOAD_DIR, path.basename(url))); }
-    catch { throw errors.badRequest('One of the photos is no longer available. Upload it again.', 'BAD_IMAGE'); }
+    if (!(await imageExists(url))) throw errors.badRequest('One of the photos is no longer available. Upload it again.', 'BAD_IMAGE');
   }
 }
 
@@ -233,7 +231,7 @@ postsRouter.get('/:id', validate({ params: idParams }), async (req, res) => {
 
 const editSchema = z.strictObject({
   text: text.optional(),
-  title: z.string().trim().min(2).max(150).optional(),
+  title: clean(z.string().trim().min(2).max(150)).optional(),
   category: z.enum(CATEGORIES).optional(),
   price: z.number().min(0).max(1e8).nullable().optional(),
 });
@@ -342,7 +340,7 @@ postsRouter.get('/:id/comments', validate({ params: idParams, query: z.object({ 
 });
 
 postsRouter.post('/:id/comments', commentLimiter,
-  validate({ params: idParams, body: z.strictObject({ text: z.string().trim().min(1, 'Write a comment').max(1000, 'Keep comments under 1,000 characters'), parent: oid.optional() }) }),
+  validate({ params: idParams, body: z.strictObject({ text: clean(z.string().trim().min(1, 'Write a comment').max(1000, 'Keep comments under 1,000 characters')), parent: oid.optional() }) }),
   async (req, res) => {
     const post = await loadVisiblePost(req, { allowOwnHidden: false });
     let parent = null;
@@ -484,7 +482,7 @@ postsRouter.get('/:id/rsvps', validate({ params: idParams }), async (req, res) =
   res.json({ people: rows.filter((x) => x.user).map((x) => ({ id: x.user._id, name: x.user.name, avatarUrl: x.user.avatarUrl, status: x.status })) });
 });
 
-postsRouter.post('/:id/offers', commentLimiter, validate({ params: idParams, body: z.strictObject({ message: z.string().trim().max(500).optional() }) }), async (req, res) => {
+postsRouter.post('/:id/offers', commentLimiter, validate({ params: idParams, body: z.strictObject({ message: clean(z.string().trim().max(500)).optional() }) }), async (req, res) => {
   const post = await loadVisiblePost(req, { allowOwnHidden: false });
   if (post.category !== 'help') throw errors.badRequest('You can only offer help on help requests.', 'NOT_HELP');
   if (post.author.equals(req.user._id)) throw errors.badRequest('You can’t offer help on your own request.', 'SELF_OFFER');
