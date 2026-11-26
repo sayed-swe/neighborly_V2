@@ -114,6 +114,7 @@ The notification bell covers reactions, comments, replies, shares, RSVPs, help o
 | Passwords | bcrypt (cost 12); minimum 10 chars with letters + numbers; strength meter |
 | Breached passwords | Sign-up, reset and change reject passwords found in public breaches via the [Have I Been Pwned](https://haveibeenpwned.com/API/v3#PwnedPasswords) range API. Only a 5-character SHA-1 prefix leaves the server; if the service is down the check is skipped. `PWNED_PASSWORD_CHECK=false` turns it off |
 | New-device alerts | Signing in from a browser not used in the last 30 days emails the owner the device, IP and time, with a link to sign that device out |
+| Download my data | Settings → Account exports everything the account created as one JSON file (5 per hour, logged in security activity); secrets, the exact home point and other people's messages are left out |
 | Sessions | 15-min JWT access token kept **in memory only**. 30-day refresh token in an **httpOnly, SameSite=Strict** cookie scoped to `/api/auth`, stored **hashed** |
 | Token theft | Refresh tokens **rotate** on every use. Replaying an old one revokes that device's whole session family. Concurrent tabs are handled safely |
 | Instant revocation | `tokenVersion` on the user: suspension, role change, password change and "sign out everywhere" invalidate access tokens immediately |
