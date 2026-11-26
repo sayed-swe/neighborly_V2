@@ -10,13 +10,15 @@ import { clean } from '../../utils/profanity.js';
 
 const { Schema } = mongoose;
 
-/* One conversation per pair of members. `unread` counts per member keep the badge query cheap. */
+/* One conversation per pair of members. `unread` counts per member keep the badge query cheap;
+   `readAt` per member is when they last opened the thread, which drives the "Seen" receipt. */
 const conversationSchema = new Schema(
   {
     members: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], validate: (v) => v.length === 2 },
     key: { type: String, required: true, unique: true }, // sorted member ids: prevents duplicate threads
     lastMessage: { text: String, sender: Schema.Types.ObjectId, at: Date },
     unread: { type: Map, of: Number, default: {} },
+    readAt: { type: Map, of: Date, default: {} },
   },
   { timestamps: true },
 );
@@ -95,6 +97,7 @@ r.get('/:id/messages', validate({ params: z.strictObject({ id: oid }), query: z.
   const otherUser = await User.findById(other).select('name avatarUrl role location.areaName').lean();
   res.json({
     with: presentPerson(otherUser),
+    seenAt: c.readAt?.get(String(other)) ?? null, // when the other member last read the thread
     messages: page.map((m) => ({ id: m._id, body: m.body, mine: m.sender.equals(req.user._id), createdAt: m.createdAt, cursor: `${m.createdAt.getTime()}_${m._id}` })),
     hasMore,
   });
@@ -115,7 +118,7 @@ r.post('/:id/messages', commentLimiter, validate({ params: z.strictObject({ id: 
 
 r.post('/:id/read', validate({ params: z.strictObject({ id: oid }) }), async (req, res) => {
   const c = await loadConversation(req);
-  await Conversation.updateOne({ _id: c._id }, { $set: { [`unread.${req.user._id}`]: 0 } });
+  await Conversation.updateOne({ _id: c._id }, { $set: { [`unread.${req.user._id}`]: 0, [`readAt.${req.user._id}`]: new Date() } });
   res.status(204).end();
 });
 
