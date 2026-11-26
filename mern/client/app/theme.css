@@ -1,0 +1,99 @@
+/* ==========================================================================
+   Dark theme. Same roles as the light tokens in globals.css: a deep "night street"
+   base, park-green stays the trust colour, terracotta stays the action colour.
+   <html data-theme="dark"> is set before paint by the boot script in layout.js.
+   ========================================================================== */
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #121815;
+  --paper-2: #1a221e;
+  --surface: #1b2320;
+  --ink: #ece6db;
+  --ink-2: #cbc5ba;
+  --muted: #9ba49e;
+  --line: #2b3530;
+  --line-strong: #3b4741;
+
+  --green-950: #0a1c14;
+  --green-900: #10291f;
+  --green: #3f8f6b;
+  --green-600: #5aa883;
+  --green-200: #2d4b3d;
+  --green-100: #1d3329;
+
+  --brick: #d8694d;
+  --brick-700: #e58063;
+  --brick-100: #3a231c;
+
+  --sun: #e9a93a;
+  --sun-100: #3a2f17;
+  --sky: #7aa6dc;
+  --sky-100: #1b2a3c;
+  --plum: #b48ac0;
+  --plum-100: #2e2333;
+  --danger: #e2685c;
+  --danger-100: #3a1e1b;
+  --ok: #5bbf86;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px -12px rgb(0 0 0 / 55%);
+  --shadow-lg: 0 2px 4px rgb(0 0 0 / 30%), 0 24px 48px -20px rgb(0 0 0 / 65%);
+  --ring: 0 0 0 3px rgb(63 143 107 / 38%);
+}
+
+/* Translucent bars were tinted with the light paper colour */
+[data-theme='dark'] .topbar { background: rgb(18 24 21 / 88%); }
+[data-theme='dark'] .lnav { background: rgb(18 24 21 / 85%); }
+[data-theme='dark'] .picker-map-hint { background: rgb(27 35 32 / 92%); }
+[data-theme='dark'] .composer-img-busy { background: rgb(0 0 0 / 50%); }
+
+/* Hover washes were dark-on-light */
+[data-theme='dark'] .user-menu-btn:hover,
+[data-theme='dark'] .fb-me:hover,
+[data-theme='dark'] .fb-filters button:hover,
+[data-theme='dark'] .icon-btn:hover,
+[data-theme='dark'] .top-icon:hover { background: rgb(255 255 255 / 7%); }
+[data-theme='dark'] .btn-ghost:hover { --bg: rgb(255 255 255 / 7%); }
+
+/* Dark surfaces that used --ink as a background */
+[data-theme='dark'] .toast,
+[data-theme='dark'] .skip-link,
+[data-theme='dark'] .chart-tip { background: #2c3833; }
+[data-theme='dark'] .toast[data-kind='error'] { background: #6b2620; }
+
+/* Text on tinted backgrounds */
+[data-theme='dark'] .badge-sun,
+[data-theme='dark'] .post-hidden-note,
+[data-theme='dark'] .quick-item.tone-sun .quick-ico,
+[data-theme='dark'] .tone-sun .feature-ico,
+[data-theme='dark'] .role-ico.tone-sun { color: #f0c46a; }
+[data-theme='dark'] .alert-warn,
+[data-theme='dark'] .alert-banner.sev-low,
+[data-theme='dark'] .alert-banner.sev-medium { color: #f0c46a; border-color: #5c4a22; }
+[data-theme='dark'] .alert-error { color: #f3a39a; border-color: #6b322b; }
+[data-theme='dark'] .alert-info { color: #a9c7ec; border-color: #2f4866; }
+[data-theme='dark'] .badge-sky { color: #a9c7ec; }
+
+/* Light-only fills and borders */
+[data-theme='dark'] .quick-danger,
+[data-theme='dark'] .danger-zone { border-color: #6b322b; }
+[data-theme='dark'] .btn-danger { --bd: #6b322b; }
+[data-theme='dark'] .table tr.is-suspended td { background: #2a1d1a; }
+[data-theme='dark'] .role-option[aria-checked='true'],
+[data-theme='dark'] .bell-pop li button.is-unread,
+[data-theme='dark'] .note-list li button.is-unread { background: var(--green-100); }
+[data-theme='dark'] .post.is-hidden { background: #221d15; }
+[data-theme='dark'] .em.sev-critical { background: #2a1a18; }
+[data-theme='dark'] .emergency-demo { background: var(--surface); }
+[data-theme='dark'] .btn-google { --bg: var(--surface); }
+[data-theme='dark'] .btn-google:hover { --bg: #232c27; }
+[data-theme='dark'] .input:hover,
+[data-theme='dark'] .select:hover,
+[data-theme='dark'] .textarea:hover { border-color: #4d5a53; }
+[data-theme='dark'] .sk { background-image: linear-gradient(90deg, var(--paper-2) 25%, #232c27 50%, var(--paper-2) 75%); }
+
+/* Map tiles: dim them so the page doesn't glare; pins and overlays keep their colour */
+[data-theme='dark'] .leaflet-tile-pane { filter: brightness(0.78) contrast(1.05) saturate(0.85); }
+[data-theme='dark'] .leaflet-container { background: var(--paper-2); }
