@@ -137,6 +137,19 @@ describe('messages', () => {
     await request(app).post(`/api/conversations/${c.id}/read`).set(auth(b)).expect(204);
     expect((await request(app).get('/api/conversations/unread-count').set(auth(b))).body.count).toBe(0);
   });
+
+  it('tells the sender when the other member has read the thread, and only the sender', async () => {
+    const a = await member('a@example.com');
+    const b = await member('b@example.com');
+    const c = (await request(app).post('/api/conversations').set(auth(a)).send({ userId: b.user.id })).body;
+    await request(app).post(`/api/conversations/${c.id}/messages`).set(auth(a)).send({ body: 'Still selling the lamp?' }).expect(201);
+    expect((await request(app).get(`/api/conversations/${c.id}/messages`).set(auth(a))).body.seenAt).toBeNull();
+    await request(app).post(`/api/conversations/${c.id}/read`).set(auth(b)).expect(204);
+    const forA = (await request(app).get(`/api/conversations/${c.id}/messages`).set(auth(a))).body;
+    expect(new Date(forA.seenAt) >= new Date(forA.messages[0].createdAt)).toBe(true);
+    // b's own view reports a's reading, not b's
+    expect((await request(app).get(`/api/conversations/${c.id}/messages`).set(auth(b))).body.seenAt).toBeNull();
+  });
 });
 
 describe('emergency alerts & notifications', () => {

@@ -35,6 +35,7 @@ function Thread({ id, onSent }) {
       if (document.visibilityState !== 'visible' || !lastCursor.current) return;
       try {
         const { data: d } = await api.get(`/conversations/${id}/messages`, { params: { after: lastCursor.current } });
+        if (alive) setData((cur) => (cur && cur.seenAt !== d.seenAt ? { ...cur, seenAt: d.seenAt } : cur));
         if (alive && d.messages.length) {
           setData((cur) => ({ ...cur, messages: [...cur.messages, ...d.messages.filter((m) => !cur.messages.some((x) => x.id === m.id))] }));
           lastCursor.current = d.messages.at(-1).cursor;
@@ -69,6 +70,9 @@ function Thread({ id, onSent }) {
   }
 
   if (!data) return <div className="page-loader"><Spinner size={24} /></div>;
+  // "Seen" goes under my latest message the other member has read
+  const seenId = data.seenAt && data.messages.findLast((m) => m.mine && new Date(m.createdAt) <= new Date(data.seenAt))?.id;
+  const lastMine = data.messages.findLast((m) => m.mine)?.id;
   return (
     <div className="thread">
       <header className="thread-head">
@@ -86,6 +90,7 @@ function Thread({ id, onSent }) {
             <div key={m.id}>
               {gap && <p className="thread-time tiny muted">{new Date(m.createdAt).toLocaleString('en-GB', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</p>}
               <div className={`bubble ${m.mine ? 'mine' : ''}`}>{m.body}</div>
+              {m.id === seenId && <p className="bubble-receipt tiny muted">{m.id === lastMine ? 'Seen' : `Seen ${timeAgo(data.seenAt)}`}</p>}
             </div>
           );
         })}
