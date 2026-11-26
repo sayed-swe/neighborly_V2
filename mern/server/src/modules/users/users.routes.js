@@ -12,6 +12,11 @@ import { approximate, point } from '../../utils/geo.js';
 import { errors } from '../../utils/AppError.js';
 import { clearRefreshCookie } from '../auth/token.service.js';
 import { clean } from '../../utils/profanity.js';
+import { exportLimiter } from '../../middleware/security.js';
+import { Post, Comment, Reaction, Report, Rsvp, HelpOffer } from '../posts/models.js';
+import { Service, Review, ServiceRequest } from '../services/models.js';
+import { Message } from '../messages/messages.routes.js';
+import { Notification } from '../notifications/notification.model.js';
 
 const r = Router();
 r.use(authenticate, requireVerified);
@@ -100,6 +105,55 @@ r.get('/:id/profile', validate({ params: z.strictObject({ id: z.string().regex(/
 r.get('/me/activity', async (req, res) => {
   const events = await AuditEvent.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(20).select('type ip userAgent createdAt').lean();
   res.json({ events: events.map(({ _id, ...e }) => ({ id: _id, ...e })) });
+});
+
+/* Download my data: everything this account created, as one JSON file.
+   Left out on purpose: secrets (password hash, token hashes), the exact home point (never
+   leaves the server; the approximate area is included) and other people's messages. */
+const strip = (rows, ...drop) => rows.map(({ _id, __v, ...rest }) => {
+  for (const k of drop) delete rest[k];
+  return { id: _id, ...rest };
+});
+
+r.get('/me/export', exportLimiter, async (req, res) => {
+  const me = req.user._id;
+  const [user, posts, comments, reactions, rsvps, helpOffers, services, reviews, serviceRequests, reports, messages, notifications, sessions, activity] = await Promise.all([
+    User.findById(me),
+    Post.find({ author: me }).lean(),
+    Comment.find({ author: me }).lean(),
+    Reaction.find({ user: me }).lean(),
+    Rsvp.find({ user: me }).lean(),
+    HelpOffer.find({ user: me }).lean(),
+    Service.find({ provider: me }).lean(),
+    Review.find({ author: me }).lean(),
+    ServiceRequest.find({ requester: me }).lean(),
+    Report.find({ reporter: me }).select('targetType target reason details status createdAt').lean(),
+    Message.find({ sender: me }).select('conversation body createdAt').lean(),
+    Notification.find({ user: me }).lean(),
+    Session.find({ user: me }).select('userAgent ip createdAt lastUsedAt expiresAt revokedAt revokedReason').lean(),
+    AuditEvent.find({ user: me }).select('type ip userAgent createdAt').lean(),
+  ]);
+
+  audit(req, 'data_exported', { user: me });
+  const file = `neighborly-data-${new Date().toISOString().slice(0, 10)}.json`;
+  res.set({ 'Content-Disposition': `attachment; filename="${file}"`, 'Cache-Control': 'no-store' });
+  res.json({
+    exportedAt: new Date().toISOString(),
+    profile: user.toJSON(),
+    posts: strip(posts, 'moderation'),
+    comments: strip(comments),
+    reactions: strip(reactions),
+    rsvps: strip(rsvps),
+    helpOffers: strip(helpOffers),
+    services: strip(services),
+    reviewsWritten: strip(reviews),
+    serviceRequestsSent: strip(serviceRequests),
+    reportsFiled: strip(reports),
+    messagesSent: strip(messages),
+    notifications: strip(notifications),
+    sessions: strip(sessions),
+    securityActivity: strip(activity),
+  });
 });
 
 r.delete('/me', validate({ body: z.strictObject({ password: z.string().min(1).max(128) }) }), async (req, res) => {

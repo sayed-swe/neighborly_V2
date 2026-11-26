@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Laptop, LogOut, MapPin, Shield, Smartphone, Trash2, User } from 'lucide-react';
+import { Download, Laptop, LogOut, MapPin, Shield, Smartphone, Trash2, User } from 'lucide-react';
 import { api, parseError, setAccessToken } from '@/lib/api';
 import { useAuth } from '@/lib/AuthProvider';
 import { applyFieldErrors } from '@/lib/useApplyFieldErrors';
@@ -215,6 +215,39 @@ function SecurityTab() {
 }
 
 /* ---------------- Account ---------------- */
+function ExportData() {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  async function download() {
+    setBusy(true);
+    try {
+      const { data, headers } = await api.get('/users/me/export', { responseType: 'blob' });
+      const name = /filename="([^"]+)"/.exec(headers['content-disposition'] ?? '')?.[1] ?? 'neighborly-data.json';
+      const url = URL.createObjectURL(data);
+      const a = Object.assign(document.createElement('a'), { href: url, download: name });
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Your data is downloading');
+    } catch (err) {
+      // With responseType 'blob' the JSON error body arrives as a Blob too
+      if (err.response?.data instanceof Blob) {
+        try { err.response.data = JSON.parse(await err.response.data.text()); } catch { /* not JSON */ }
+      }
+      toast(parseError(err).message, 'error');
+    }
+    setBusy(false);
+  }
+
+  return (
+    <section className="card card-pad">
+      <h3 className="card-title">Download your data</h3>
+      <p className="small muted" style={{ marginBottom: 16 }}>One JSON file with your profile, posts, comments, reviews, messages you sent, devices and security activity. Your exact home pin isn’t included; it never leaves our server.</p>
+      <Button type="button" className="btn btn-ghost" loading={busy} onClick={download}><Download size={16} /> Download my data</Button>
+    </section>
+  );
+}
+
 function AccountTab() {
   const { endSession } = useAuth();
   const router = useRouter();
@@ -239,6 +272,7 @@ function AccountTab() {
 
   return (
     <div className="settings-section">
+      <ExportData />
       <form className="card card-pad danger-zone" onSubmit={del}>
         <h3 className="card-title">Delete account</h3>
         <p className="small muted" style={{ marginBottom: 16 }}>This permanently removes your profile, your home location and every signed-in session. It can’t be undone.</p>
